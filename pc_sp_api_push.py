@@ -12,9 +12,10 @@ ONLY these attributes per SKU using PATCH /listings/2021-08-01/items/{sellerId}/
     chargeable_weight_lbs  → item_package_weight
     box_length_in/_width_/_height_ → item_package_dimensions
     item_type_keyword      → item_type_keyword
-    shipping_template      → merchant_shipping_group_name
 
-Nothing else is touched — no description, price, quantity, or variations.
+Nothing else is touched — no description, price, quantity, shipping
+template, or variations.  Shipping templates must be managed through
+Seller Central or an inventory loader feed.
 
 Flow per SKU:
     1. GET listing to discover its productType (e.g. CUTTING_BOARD, PRODUCT, etc.)
@@ -247,10 +248,6 @@ def build_patches(row: dict, mkt: str) -> list:
     if g('item_type_keyword'):
         p.append({'op': 'replace', 'path': '/attributes/item_type_keyword',
                   'value': _txt(g('item_type_keyword'), mkt)})
-
-    if g('shipping_template'):
-        p.append({'op': 'replace', 'path': '/attributes/merchant_shipping_group_name',
-                  'value': _plain(g('shipping_template'), mkt)})
 
     return p
 
