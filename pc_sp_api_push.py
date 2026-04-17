@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-pc_sp_api_push.py — Simple Amazon SP-API push for approved listing fields.
+pc_sp_api_push.py — Push approved listing fields to Amazon via SP-API Listings Items API.
 
-Reads the most recent pc_amazon_feed_v4_*.csv in the script folder and
-submits ONLY these attributes per SKU via JSON_LISTINGS_FEED (PATCH):
+Reads the most recent pc_amazon_feed_v4_*.csv in the script folder and submits
+ONLY these attributes per SKU using PATCH /listings/2021-08-01/items/{sellerId}/{sku}:
 
     new_title              → item_name
     bullet1..bullet5       → bullet_point (list, empties skipped)
@@ -16,6 +16,11 @@ submits ONLY these attributes per SKU via JSON_LISTINGS_FEED (PATCH):
 
 Nothing else is touched — no description, price, quantity, or variations.
 
+Flow per SKU:
+    1. GET listing to discover its productType (e.g. CUTTING_BOARD, PRODUCT, etc.)
+    2. PATCH the listing with the approved fields
+    3. Log success/error immediately — no batching, no polling
+
 Usage
 -----
     python pc_sp_api_push.py                # push every eligible row
@@ -27,9 +32,6 @@ Environment variables
     LWA_CLIENT_ID
     LWA_CLIENT_SECRET
     LWA_REFRESH_TOKEN
-    AWS_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY
-    AWS_REGION              (default: us-east-1)
     SELLER_ID
     MARKETPLACE_ID          (default: ATVPDKIKX0DER)
 """
@@ -37,15 +39,11 @@ Environment variables
 import argparse
 import csv
 import glob
-import gzip
-import hashlib
-import hmac
 import json
 import os
 import sys
 import time
-import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -60,16 +58,10 @@ RUN_ID       = datetime.now().strftime('%Y%m%d_%H%M%S')
 RESULTS_FILE = SCRIPT_DIR / f'pc_push_results_{RUN_ID}.csv'
 
 # ─── SP-API constants ─────────────────────────────────────────────────────────
-LWA_ENDPOINT      = 'https://api.amazon.com/auth/o2/token'
-SP_API_HOST       = 'sellingpartnerapi-na.amazon.com'
-SP_API_BASE       = f'https://{SP_API_HOST}'
-AWS_SERVICE       = 'execute-api'
-FEED_TYPE         = 'JSON_LISTINGS_FEED'
-FEED_CONTENT_TYPE = 'application/json; charset=UTF-8'
-BATCH_SIZE        = 50
-POLL_INTERVAL     = 30      # seconds between status checks
-POLL_TIMEOUT      = 900     # 15 min max per feed
-MAX_RETRIES       = 3
+LWA_ENDPOINT = 'https://api.amazon.com/auth/o2/token'
+SP_API_BASE  = 'https://sellingpartnerapi-na.amazon.com'
+MAX_RETRIES  = 3
+REQUEST_GAP  = 0.25   # seconds between API calls (4 req/sec, under 5/sec limit)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -81,14 +73,10 @@ def load_credentials() -> dict:
         'lwa_client_id':     os.environ.get('LWA_CLIENT_ID', ''),
         'lwa_client_secret': os.environ.get('LWA_CLIENT_SECRET', ''),
         'lwa_refresh_token': os.environ.get('LWA_REFRESH_TOKEN', ''),
-        'aws_access_key':    os.environ.get('AWS_ACCESS_KEY_ID', ''),
-        'aws_secret_key':    os.environ.get('AWS_SECRET_ACCESS_KEY', ''),
-        'aws_region':        os.environ.get('AWS_REGION', 'us-east-1'),
         'seller_id':         os.environ.get('SELLER_ID', ''),
         'marketplace_id':    os.environ.get('MARKETPLACE_ID', 'ATVPDKIKX0DER'),
     }
-    required = ['lwa_client_id', 'lwa_client_secret', 'lwa_refresh_token',
-                'aws_access_key', 'aws_secret_key', 'seller_id']
+    required = ['lwa_client_id', 'lwa_client_secret', 'lwa_refresh_token', 'seller_id']
     missing = [k for k in required if not c[k]]
     if missing:
         print(f'\n[ERROR] Missing env vars: {", ".join(missing)}')
@@ -122,77 +110,31 @@ class TokenManager:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AWS Signature V4
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _hmac256(key: bytes, msg: str) -> bytes:
-    return hmac.new(key, msg.encode('utf-8'), digestmod=hashlib.sha256).digest()
-
-
-def _signing_key(secret: str, date: str, region: str) -> bytes:
-    k = _hmac256(('AWS4' + secret).encode(), date)
-    k = _hmac256(k, region)
-    k = _hmac256(k, AWS_SERVICE)
-    return _hmac256(k, 'aws4_request')
-
-
-def sign_request(method: str, url: str, headers: dict, payload: bytes,
-                 access_key: str, secret_key: str, region: str) -> dict:
-    parsed   = urllib.parse.urlparse(url)
-    now      = datetime.now(timezone.utc)
-    amz_date = now.strftime('%Y%m%dT%H%M%SZ')
-    date_str = now.strftime('%Y%m%d')
-
-    h = {'host': parsed.netloc, 'x-amz-date': amz_date,
-         **{k.lower(): v for k, v in headers.items()}}
-    sh   = sorted(h.items())
-    ch   = ''.join(f'{k}:{v}\n' for k, v in sh)
-    sig_hdrs = ';'.join(k for k, _ in sh)
-    p_hash   = hashlib.sha256(payload).hexdigest()
-    qs       = urllib.parse.urlencode(sorted(urllib.parse.parse_qsl(parsed.query or '')))
-    creq     = '\n'.join([method,
-                          urllib.parse.quote(parsed.path or '/', safe='/-_.~'),
-                          qs, ch, sig_hdrs, p_hash])
-    scope    = f'{date_str}/{region}/{AWS_SERVICE}/aws4_request'
-    sts      = '\n'.join(['AWS4-HMAC-SHA256', amz_date, scope,
-                          hashlib.sha256(creq.encode()).hexdigest()])
-    sig      = hmac.new(_signing_key(secret_key, date_str, region),
-                        sts.encode(), digestmod=hashlib.sha256).hexdigest()
-
-    return {**headers,
-            'Host': parsed.netloc,
-            'X-Amz-Date': amz_date,
-            'Authorization': (f'AWS4-HMAC-SHA256 Credential={access_key}/{scope}, '
-                              f'SignedHeaders={sig_hdrs}, Signature={sig}')}
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # SP-API calls
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def sp_call(method: str, path: str, creds: dict, tokens: TokenManager,
-            body: dict | None = None) -> requests.Response:
-    """SP-API request — LWA token only (SigV4 deprecated as of late 2023)."""
+def sp_request(method: str, path: str, tokens: TokenManager,
+               params: dict | None = None,
+               body: dict | None = None) -> requests.Response:
     url     = f'{SP_API_BASE}{path}'
-    payload = json.dumps(body).encode() if body else b''
-    headers = {'x-amz-access-token': tokens.get(),
-               'Content-Type':       'application/json',
-               'Accept':             'application/json'}
+    payload = json.dumps(body).encode() if body else None
+    headers = {
+        'x-amz-access-token': tokens.get(),
+        'Accept':             'application/json',
+    }
+    if body is not None:
+        headers['Content-Type'] = 'application/json'
+
     for attempt in range(MAX_RETRIES):
         try:
             r = requests.request(method, url, headers=headers,
-                                 data=payload, timeout=60)
+                                 params=params, data=payload, timeout=60)
             if r.status_code == 429:
                 wait = 5 * (2 ** attempt)
-                print(f'    [THROTTLE] {path}: waiting {wait}s')
+                print(f'    [THROTTLE] waiting {wait}s')
                 time.sleep(wait)
                 headers['x-amz-access-token'] = tokens.get()
                 continue
-            if not r.ok:
-                # Print response body on error — helps diagnose 403 / 400
-                print(f'    [HTTP {r.status_code}] {path}')
-                if r.text:
-                    print(f'    Response: {r.text[:500]}')
             return r
         except requests.RequestException as e:
             if attempt == MAX_RETRIES - 1:
@@ -202,57 +144,41 @@ def sp_call(method: str, path: str, creds: dict, tokens: TokenManager,
     raise RuntimeError(f'{path}: failed after retries')
 
 
-def create_feed_document(creds, tokens) -> dict:
-    r = sp_call('POST', '/feeds/2021-06-30/feedDocuments', creds, tokens,
-                body={'contentType': FEED_CONTENT_TYPE})
+def get_listing_product_type(tokens: TokenManager, seller_id: str,
+                              marketplace_id: str, sku: str) -> str | None:
+    """Return productType for an existing SKU, or None if not found."""
+    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+                   tokens, params={'marketplaceIds': marketplace_id})
+    if r.status_code == 404:
+        return None
     r.raise_for_status()
-    return r.json()
+    data = r.json()
+    summaries = data.get('summaries', []) or []
+    for s in summaries:
+        if s.get('marketplaceId') == marketplace_id and s.get('productType'):
+            return s['productType']
+    # Fall back: any productType
+    for s in summaries:
+        if s.get('productType'):
+            return s['productType']
+    return None
 
 
-def upload_feed(url: str, data: bytes) -> None:
-    r = requests.put(url, data=data,
-                     headers={'Content-Type': FEED_CONTENT_TYPE}, timeout=120)
-    r.raise_for_status()
-
-
-def create_feed(creds, tokens, doc_id: str) -> str:
-    r = sp_call('POST', '/feeds/2021-06-30/feeds', creds, tokens, body={
-        'feedType':            FEED_TYPE,
-        'marketplaceIds':      [creds['marketplace_id']],
-        'inputFeedDocumentId': doc_id,
-    })
-    r.raise_for_status()
-    return r.json()['feedId']
-
-
-def poll_feed(creds, tokens, feed_id: str) -> dict:
-    deadline = time.time() + POLL_TIMEOUT
-    while time.time() < deadline:
-        r = sp_call('GET', f'/feeds/2021-06-30/feeds/{feed_id}', creds, tokens)
-        r.raise_for_status()
-        s  = r.json()
-        ps = s.get('processingStatus', '')
-        print(f'    [POLL] {feed_id}: {ps}')
-        if ps in ('DONE', 'FATAL', 'CANCELLED'):
-            return s
-        time.sleep(POLL_INTERVAL)
-    raise TimeoutError(f'Feed {feed_id} did not finish within {POLL_TIMEOUT}s')
-
-
-def get_result(creds, tokens, doc_id: str) -> str:
-    r = sp_call('GET', f'/feeds/2021-06-30/feedDocuments/{doc_id}', creds, tokens)
-    r.raise_for_status()
-    d = r.json()
-    dl = requests.get(d['url'], timeout=120)
-    dl.raise_for_status()
-    body = dl.content
-    if d.get('compressionAlgorithm') == 'GZIP':
-        body = gzip.decompress(body)
-    return body.decode('utf-8', errors='replace')
+def patch_listing(tokens: TokenManager, seller_id: str, marketplace_id: str,
+                   sku: str, product_type: str, patches: list) -> tuple[int, dict]:
+    """PATCH a listing.  Returns (status_code, response_json)."""
+    body = {'productType': product_type, 'patches': patches}
+    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+                   tokens, params={'marketplaceIds': marketplace_id}, body=body)
+    try:
+        payload = r.json()
+    except ValueError:
+        payload = {'raw': r.text[:500]}
+    return r.status_code, payload
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Build JSON_LISTINGS_FEED  (only the requested fields)
+# Build patches (only the requested fields)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _txt(v: str, mkt: str) -> list:
@@ -329,51 +255,6 @@ def build_patches(row: dict, mkt: str) -> list:
     return p
 
 
-def build_feed_body(rows: list[dict], seller_id: str, mkt: str) -> bytes:
-    msgs = []
-    for idx, row in enumerate(rows, start=1):
-        sku = (row.get('sku', '') or '').strip()
-        pts = build_patches(row, mkt)
-        if not sku or not pts:
-            continue
-        msgs.append({
-            'messageId':     idx,
-            'sku':           sku,
-            'operationType': 'PATCH',
-            'productType':   'PRODUCT',
-            'patches':       pts,
-        })
-    doc = {
-        'header':   {'sellerId': seller_id, 'version': '2.0', 'issueLocale': 'en_US'},
-        'messages': msgs,
-    }
-    return json.dumps(doc, ensure_ascii=False, indent=2).encode('utf-8')
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Parse processing report
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def parse_result(body: str) -> dict[str, str]:
-    if not body.strip():
-        return {}
-    try:
-        doc = json.loads(body)
-    except json.JSONDecodeError:
-        return {}
-    errs = {}
-    for issue in doc.get('issues', []):
-        sev = issue.get('severity', '')
-        if sev not in ('ERROR', 'WARNING'):
-            continue
-        sku = issue.get('sku', '')
-        msg = f"{sev} [{issue.get('code','')}] {issue.get('message','')}"
-        if errs.get(sku, '').startswith('ERROR') and sev == 'WARNING':
-            continue
-        errs[sku] = msg
-    return errs
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Input + CLI
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -401,10 +282,11 @@ def load_rows(path: Path, limit: int = 0) -> list[dict]:
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(description=__doc__.split('\n')[1],
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description='Push approved listing fields via SP-API Listings Items API.',
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--dry-run', action='store_true',
-                    help='Build + validate JSON without submitting to Amazon')
+                    help='Build + validate patches without submitting to Amazon')
     ap.add_argument('--limit', type=int, default=0, metavar='N',
                     help='Cap to first N listings')
     return ap.parse_args()
@@ -415,8 +297,8 @@ def parse_args():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    args  = parse_args()
-    creds = load_credentials()
+    args     = parse_args()
+    creds    = load_credentials()
     csv_path = find_csv()
 
     print('\n' + '═' * 60)
@@ -425,134 +307,151 @@ def main():
     print(f'  Input  : {csv_path.name}')
     print(f'  Seller : {creds["seller_id"]}')
     print(f'  Market : {creds["marketplace_id"]}')
+    print(f'  API    : Listings Items 2021-08-01 (per-SKU PATCH)')
     print('═' * 60)
 
     rows = load_rows(csv_path, args.limit)
     if not rows:
-        print('\n  No eligible rows (need non-empty sku + new_title). Exiting.')
+        print('\n  No eligible rows (need non-empty sku + new_title).')
         return
-    print(f'\n  Loaded {len(rows)} listing(s)')
+    print(f'\n  Loaded {len(rows)} listing(s)\n')
 
-    batches = [rows[i:i + BATCH_SIZE] for i in range(0, len(rows), BATCH_SIZE)]
-    print(f'  Batches: {len(batches)} × ≤{BATCH_SIZE}\n')
-
-    # Open results CSV
+    # Results CSV
     fh = open(RESULTS_FILE, 'w', newline='', encoding='utf-8')
     writer = csv.DictWriter(fh, fieldnames=[
-        'sku', 'asin', 'title', 'feed_id', 'status', 'error_message', 'pushed_at',
+        'sku', 'asin', 'title', 'product_type', 'status',
+        'error_code', 'error_message', 'pushed_at',
     ])
     writer.writeheader()
     fh.flush()
 
-    def record(sku, asin, title, feed_id, status, error=''):
+    def record(sku, asin, title, product_type, status, code='', err=''):
         writer.writerow({
-            'sku': sku, 'asin': asin, 'title': title[:120],
-            'feed_id': feed_id, 'status': status, 'error_message': error,
-            'pushed_at': datetime.now().isoformat(timespec='seconds'),
+            'sku':           sku,
+            'asin':          asin,
+            'title':         title[:120],
+            'product_type':  product_type,
+            'status':        status,
+            'error_code':    code,
+            'error_message': err,
+            'pushed_at':     datetime.now().isoformat(timespec='seconds'),
         })
         fh.flush()
 
     tokens = TokenManager(creds)
-    stats  = {'success': 0, 'warning': 0, 'error': 0, 'feeds': 0}
+    mkt    = creds['marketplace_id']
+    seller = creds['seller_id']
+    stats  = {'success': 0, 'error': 0, 'skipped': 0, 'not_found': 0}
 
     try:
-        for n, batch in enumerate(batches, 1):
-            print(f'  Batch {n}/{len(batches)}  ({len(batch)} listings)')
-            body = build_feed_body(batch, creds['seller_id'], creds['marketplace_id'])
+        for n, row in enumerate(rows, 1):
+            sku   = (row.get('sku', '') or '').strip()
+            asin  = (row.get('asin', '') or '').strip()
+            title = (row.get('new_title', '') or '').strip()
 
+            print(f'  [{n}/{len(rows)}] {sku}')
+
+            # ── Build patches ─────────────────────────────────────────────────
+            patches = build_patches(row, mkt)
+            if not patches:
+                print(f'    [SKIP] No fields to update')
+                record(sku, asin, title, '', 'skipped', 'NoFields',
+                       'No non-empty approved fields')
+                stats['skipped'] += 1
+                continue
+
+            # ── DRY RUN ───────────────────────────────────────────────────────
             if args.dry_run:
-                if n == 1:
-                    print('\n  [DRY RUN] JSON preview (first 1500 bytes):')
-                    for line in body[:1500].decode('utf-8', errors='replace').splitlines():
-                        print(f'    {line}')
-                    print()
-                for r in batch:
-                    record((r.get('sku', '') or '').strip(),
-                           (r.get('asin', '') or '').strip(),
-                           (r.get('new_title', '') or '').strip(),
-                           '', 'dry_run')
-                    stats['success'] += 1
-                print(f'    [DRY RUN] Batch {n} validated — not submitted.\n')
+                print(f'    [DRY RUN] Would PATCH {len(patches)} field(s): '
+                      f'{", ".join(p["path"].split("/")[-1] for p in patches)}')
+                record(sku, asin, title, '', 'dry_run')
+                stats['success'] += 1
                 continue
 
-            feed_id = ''
+            # ── Step 1: discover productType ──────────────────────────────────
             try:
-                print(f'    Creating feed document …', end=' ', flush=True)
-                doc = create_feed_document(creds, tokens)
-                print(f'OK ({doc["feedDocumentId"]})')
-
-                print(f'    Uploading JSON ({len(body):,} bytes) …', end=' ', flush=True)
-                upload_feed(doc['url'], body)
-                print('OK')
-
-                print(f'    Creating feed …', end=' ', flush=True)
-                feed_id = create_feed(creds, tokens, doc['feedDocumentId'])
-                stats['feeds'] += 1
-                print(f'OK (feedId={feed_id})')
-
-                print(f'    Polling (timeout {POLL_TIMEOUT}s) …')
-                final = poll_feed(creds, tokens, feed_id)
-                ps    = final.get('processingStatus', 'UNKNOWN')
-                print(f'    Status: {ps}')
+                product_type = get_listing_product_type(tokens, seller, mkt, sku)
             except Exception as exc:
-                print(f'FAILED: {exc}')
-                for r in batch:
-                    record((r.get('sku', '') or '').strip(),
-                           (r.get('asin', '') or '').strip(),
-                           (r.get('new_title', '') or '').strip(),
-                           feed_id, 'error', str(exc))
-                    stats['error'] += 1
-                print()
+                print(f'    [ERROR] GET failed: {exc}')
+                record(sku, asin, title, '', 'error', 'GetFailed', str(exc))
+                stats['error'] += 1
+                time.sleep(REQUEST_GAP)
                 continue
 
-            if ps in ('FATAL', 'CANCELLED'):
-                for r in batch:
-                    record((r.get('sku', '') or '').strip(),
-                           (r.get('asin', '') or '').strip(),
-                           (r.get('new_title', '') or '').strip(),
-                           feed_id, ps.lower(), f'Feed {ps}')
-                    stats['error'] += 1
-                print()
+            if product_type is None:
+                print(f'    [NOT FOUND] SKU does not exist on {mkt}')
+                record(sku, asin, title, '', 'not_found', 'NotFound',
+                       'SKU not found on marketplace')
+                stats['not_found'] += 1
+                time.sleep(REQUEST_GAP)
                 continue
 
-            sku_errors = {}
-            rid = final.get('resultFeedDocumentId', '')
-            if rid:
-                try:
-                    print(f'    Fetching result …', end=' ', flush=True)
-                    sku_errors = parse_result(get_result(creds, tokens, rid))
-                    print(f'OK ({len(sku_errors)} issue(s))')
-                except Exception as exc:
-                    print(f'WARN: {exc}')
+            print(f'    productType: {product_type}  →  PATCH {len(patches)} field(s)')
+            time.sleep(REQUEST_GAP)
 
-            for r in batch:
-                sku   = (r.get('sku', '') or '').strip()
-                asin  = (r.get('asin', '') or '').strip()
-                title = (r.get('new_title', '') or '').strip()
-                err   = sku_errors.get(sku, '')
-                if not err:
-                    record(sku, asin, title, feed_id, 'success')
-                    stats['success'] += 1
-                elif err.startswith('WARNING'):
-                    record(sku, asin, title, feed_id, 'warning', err)
-                    stats['warning'] += 1
-                    print(f'    [WARN]  {sku}: {err}')
+            # ── Step 2: PATCH ─────────────────────────────────────────────────
+            try:
+                code, resp = patch_listing(tokens, seller, mkt, sku,
+                                           product_type, patches)
+            except Exception as exc:
+                print(f'    [ERROR] PATCH failed: {exc}')
+                record(sku, asin, title, product_type, 'error',
+                       'PatchFailed', str(exc))
+                stats['error'] += 1
+                time.sleep(REQUEST_GAP)
+                continue
+
+            if 200 <= code < 300:
+                submission_id = resp.get('submissionId', '')
+                status_resp   = resp.get('status', 'ACCEPTED')
+                issues        = resp.get('issues', []) or []
+                err_issues    = [i for i in issues
+                                  if i.get('severity') in ('ERROR',)]
+                warn_issues   = [i for i in issues
+                                  if i.get('severity') == 'WARNING']
+
+                if err_issues:
+                    msg = '; '.join(
+                        f"{i.get('code','')}:{i.get('message','')}"
+                        for i in err_issues)
+                    print(f'    [ERROR] {msg}')
+                    record(sku, asin, title, product_type, 'error',
+                           'Rejected', msg)
+                    stats['error'] += 1
                 else:
-                    record(sku, asin, title, feed_id, 'error', err)
-                    stats['error'] += 1
-                    print(f'    [ERROR] {sku}: {err}')
-            print()
+                    warn_note = ''
+                    if warn_issues:
+                        warn_note = '  WARNINGS: ' + '; '.join(
+                            f"{i.get('code','')}:{i.get('message','')}"
+                            for i in warn_issues)
+                    print(f'    [OK] status={status_resp} '
+                          f'submissionId={submission_id}{warn_note}')
+                    record(sku, asin, title, product_type, 'success',
+                           '', warn_note.strip())
+                    stats['success'] += 1
+            else:
+                # HTTP error
+                err_obj = resp.get('errors', [{}])
+                err_msg = '; '.join(
+                    f"{e.get('code','')}:{e.get('message','')}"
+                    for e in (err_obj if isinstance(err_obj, list) else [err_obj]))
+                print(f'    [ERROR] HTTP {code}: {err_msg}')
+                record(sku, asin, title, product_type, 'error',
+                       f'HTTP{code}', err_msg)
+                stats['error'] += 1
+
+            time.sleep(REQUEST_GAP)
 
     finally:
         fh.close()
 
-    print('═' * 60)
+    print('\n' + '═' * 60)
     print('  DONE')
-    print(f'  Success  : {stats["success"]}')
-    print(f'  Warnings : {stats["warning"]}')
-    print(f'  Errors   : {stats["error"]}')
-    print(f'  Feeds    : {stats["feeds"]}')
-    print(f'\n  Results  → {RESULTS_FILE.name}')
+    print(f'  Success   : {stats["success"]}')
+    print(f'  Errors    : {stats["error"]}')
+    print(f'  Not found : {stats["not_found"]}')
+    print(f'  Skipped   : {stats["skipped"]}')
+    print(f'\n  Results → {RESULTS_FILE.name}')
     print('═' * 60 + '\n')
 
 
