@@ -172,25 +172,27 @@ def sign_request(method: str, url: str, headers: dict, payload: bytes,
 
 def sp_call(method: str, path: str, creds: dict, tokens: TokenManager,
             body: dict | None = None) -> requests.Response:
+    """SP-API request — LWA token only (SigV4 deprecated as of late 2023)."""
     url     = f'{SP_API_BASE}{path}'
     payload = json.dumps(body).encode() if body else b''
     headers = {'x-amz-access-token': tokens.get(),
-               'Content-Type': 'application/json'}
-    signed  = sign_request(method, url, headers, payload,
-                           creds['aws_access_key'], creds['aws_secret_key'],
-                           creds['aws_region'])
+               'Content-Type':       'application/json',
+               'Accept':             'application/json'}
     for attempt in range(MAX_RETRIES):
         try:
-            r = requests.request(method, url, headers=signed, data=payload, timeout=60)
+            r = requests.request(method, url, headers=headers,
+                                 data=payload, timeout=60)
             if r.status_code == 429:
                 wait = 5 * (2 ** attempt)
                 print(f'    [THROTTLE] {path}: waiting {wait}s')
                 time.sleep(wait)
                 headers['x-amz-access-token'] = tokens.get()
-                signed = sign_request(method, url, headers, payload,
-                                      creds['aws_access_key'], creds['aws_secret_key'],
-                                      creds['aws_region'])
                 continue
+            if not r.ok:
+                # Print response body on error — helps diagnose 403 / 400
+                print(f'    [HTTP {r.status_code}] {path}')
+                if r.text:
+                    print(f'    Response: {r.text[:500]}')
             return r
         except requests.RequestException as e:
             if attempt == MAX_RETRIES - 1:
