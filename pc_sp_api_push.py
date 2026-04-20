@@ -24,9 +24,10 @@ Flow per SKU:
 
 Usage
 -----
-    python pc_sp_api_push.py                # push every eligible row
-    python pc_sp_api_push.py --dry-run      # build + validate, do not submit
-    python pc_sp_api_push.py --limit 10     # cap to first 10 listings
+    python pc_sp_api_push.py                        # push every eligible row
+    python pc_sp_api_push.py --dry-run              # build + validate, do not submit
+    python pc_sp_api_push.py --limit 10             # cap to first 10 listings
+    python pc_sp_api_push.py --input my_file.csv    # use a specific CSV file
 
 Environment variables
 ---------------------
@@ -257,11 +258,11 @@ def build_patches(row: dict, mkt: str) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def find_csv() -> Path:
-    matches = sorted(glob.glob(str(SCRIPT_DIR / 'pc_amazon_feed_v4_*.csv')))
+    matches = glob.glob(str(SCRIPT_DIR / 'pc_amazon_feed_v4_*.csv'))
     if not matches:
         print(f'[ERROR] No pc_amazon_feed_v4_*.csv found in {SCRIPT_DIR}')
         sys.exit(1)
-    return Path(matches[-1])
+    return Path(max(matches, key=os.path.getmtime))
 
 
 def load_rows(path: Path, limit: int = 0) -> list[dict]:
@@ -286,6 +287,8 @@ def parse_args():
                     help='Build + validate patches without submitting to Amazon')
     ap.add_argument('--limit', type=int, default=0, metavar='N',
                     help='Cap to first N listings')
+    ap.add_argument('--input', metavar='FILE',
+                    help='Exact CSV file to use (default: most-recently-modified pc_amazon_feed_v4_*.csv)')
     return ap.parse_args()
 
 
@@ -296,7 +299,15 @@ def parse_args():
 def main():
     args     = parse_args()
     creds    = load_credentials()
-    csv_path = find_csv()
+    if args.input:
+        csv_path = Path(args.input)
+        if not csv_path.is_absolute():
+            csv_path = SCRIPT_DIR / csv_path
+        if not csv_path.exists():
+            print(f'[ERROR] File not found: {csv_path}')
+            sys.exit(1)
+    else:
+        csv_path = find_csv()
 
     print('\n' + '═' * 60)
     print(f'  PC SP-API Push  ({"DRY RUN" if args.dry_run else "LIVE"})')
