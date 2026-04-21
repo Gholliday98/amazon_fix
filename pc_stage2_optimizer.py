@@ -248,6 +248,14 @@ def generate_description(client: anthropic.Anthropic, prompt: str) -> str | None
                 messages=[{'role': 'user', 'content': prompt}]
             )
             text = r.content[0].text.strip()
+            # Policy compliance filter
+            try:
+                from pc_policy_validator import validate_and_fix
+                text, violations = validate_and_fix(text, 'description')
+                for v in violations:
+                    print(f'    [POLICY] {v}')
+            except ImportError:
+                pass
             if len(text) > MAX_DESC_CHARS:
                 text = text[:MAX_DESC_CHARS].rsplit(' ', 1)[0]
             return text

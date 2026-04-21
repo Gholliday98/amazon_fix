@@ -3192,6 +3192,16 @@ def process_listings():
         # Always use our pre-built title
         content['title'] = new_title
 
+        # Policy compliance filter (L5)
+        try:
+            from pc_policy_validator import validate_all_fields
+            content, policy_violations = validate_all_fields(content)
+            if policy_violations:
+                for v in policy_violations:
+                    logger.warning(f'  ⚠ POLICY: {v}')
+        except ImportError:
+            pass
+
         # Final validation
         final_issues = validate_output(content, freight_needed)
         final_status = 'ready' if not final_issues else 'ready_with_warnings'
