@@ -276,11 +276,40 @@ def build_patches(row: dict, mkt: str) -> list:
         p.append({'op': 'replace', 'path': '/attributes/model_number',
                   'value': _plain(g('model_number'), mkt)})
 
-    # contains_liquid_contents — always push this to clear the red flag.
-    # Optimizer sets 'Yes' only for adhesives (Weld-On), 'No' for everything else.
+    # ── Compliance flags — clears red exclamation marks in Seller Central ─────
+
+    # Condition
+    p.append({'op': 'replace', 'path': '/attributes/condition_type',
+              'value': _plain('new_new', mkt)})
+
+    # Liquid contents
     contains_liquid = g('contains_liquid') or 'No'
     p.append({'op': 'replace', 'path': '/attributes/contains_liquid_contents',
               'value': [{'value': contains_liquid == 'Yes', 'marketplace_id': mkt}]})
+
+    # Batteries — plastics never require batteries
+    p.append({'op': 'replace', 'path': '/attributes/batteries_required',
+              'value': [{'value': False, 'marketplace_id': mkt}]})
+    p.append({'op': 'replace', 'path': '/attributes/batteries_included',
+              'value': [{'value': False, 'marketplace_id': mkt}]})
+
+    # Age restriction — optimizer flags small spheres/cubes as choking hazard
+    age = g('age_restriction')
+    if age and age != 'None':
+        p.append({'op': 'replace', 'path': '/attributes/age_range_description',
+                  'value': _plain(age, mkt)})
+
+    # Number of items in pack
+    # Falls back to 1 if not set
+    num_items = g('pack_quantity') or '1'
+    try:
+        num_items = int(float(num_items))
+        if num_items < 1:
+            num_items = 1
+    except (ValueError, TypeError):
+        num_items = 1
+    p.append({'op': 'replace', 'path': '/attributes/number_of_items',
+              'value': [{'value': num_items, 'marketplace_id': mkt}]})
 
     return p
 
