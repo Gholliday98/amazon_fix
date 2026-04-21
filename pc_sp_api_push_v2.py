@@ -282,10 +282,17 @@ def build_patches(row: dict, mkt: str) -> list:
     p.append({'op': 'replace', 'path': '/attributes/condition_type',
               'value': _plain('new_new', mkt)})
 
-    # Liquid contents
-    contains_liquid = g('contains_liquid') or 'No'
+    # Liquid contents — true for adhesive brands regardless of CSV value
+    _ADHESIVE_BRANDS = {'weld-on', 'weldon', 'scigrip', 'acrifix', 'ips'}
+    _brand_lower = g('brand').lower()
+    _sku_lower   = (row.get('sku', '') or '').lower()
+    is_liquid = (
+        g('contains_liquid').lower() == 'yes' or
+        any(b in _brand_lower for b in _ADHESIVE_BRANDS) or
+        any(b in _sku_lower   for b in _ADHESIVE_BRANDS)
+    )
     p.append({'op': 'replace', 'path': '/attributes/contains_liquid_contents',
-              'value': [{'value': contains_liquid == 'Yes', 'marketplace_id': mkt}]})
+              'value': [{'value': is_liquid, 'marketplace_id': mkt}]})
 
     # Batteries — plastics never require batteries
     p.append({'op': 'replace', 'path': '/attributes/batteries_required',

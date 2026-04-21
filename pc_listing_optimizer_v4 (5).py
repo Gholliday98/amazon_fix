@@ -118,6 +118,7 @@ THIRD_PARTY_BRANDS = {
     'craftics': 'Craftics',
     'ips': 'IPS',
     'scigrip': 'SciGrip',
+    'acrifix': 'Acrifix',
     'novus': 'Novus',
     'brillianize': 'Brillianize',
     'dykem': 'Dykem',
