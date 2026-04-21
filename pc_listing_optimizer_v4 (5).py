@@ -2343,15 +2343,16 @@ founded 1934, ISO 9001:2015 and AS9100D certified, West Nyack NY.
 
 TITLE: Already provided — use as-is, do not regenerate.
 
-BULLETS — EVERY bullet MUST start with ALL CAPS benefit phrase + em dash (—):
+BULLETS — EVERY bullet MUST start with a Title Case benefit phrase + em dash (—):
 - B1: Material properties with specific data (PSI, temp ratings, compliance)
 - B2: Exact specs — dimensions, tolerances +/-0.010", pack quantity
 - B3: Applications — specific industries, projects, use cases (use provided intended_use)
 - B4: Fabrication — tools, bonding, forming, machining methods
-- B5: EXACTLY: "PRECISION TOLERANCES & QUALITY — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured under ISO 9001:2015 certified quality management standards for reliable material quality on every order."
+- B5: EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured under ISO 9001:2015 certified quality management standards for reliable material quality on every order."
 - Each bullet under 500 characters
 - Feature + Benefit + Proof with numbers and data
 - Answer real buyer pain points
+- NEVER use all-caps words (Amazon listing violation)
 
 DESCRIPTION:
 - START with the RUFUS Q&A BLOCK provided — format as Q: / A: pairs
@@ -2468,8 +2469,8 @@ Return ONLY the space-separated terms.""",
         prompts[field_name] = f"""Write only bullet {num} for this Amazon listing.
 Product: {new_title} | Material: {material_name}
 Focus: {bullet_focus.get(num,'product benefit')}
-Rules: MUST start with ALL CAPS benefit phrase followed by em dash (—), under 500 chars.
-Example: "IMPACT RESISTANT — ABS delivers..."
+Rules: MUST start with Title Case benefit phrase followed by em dash (—), under 500 chars. Never use all-caps words.
+Example: "Impact Resistant — ABS delivers..."
 Return ONLY the bullet text."""
 
     prompt = prompts.get(field_name)
