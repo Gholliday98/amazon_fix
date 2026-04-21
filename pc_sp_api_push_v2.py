@@ -15,10 +15,15 @@ PATCH /listings/2021-08-01/items/{sellerId}/{sku}:
     color                → color
     finish_type          → finish_type
     style                → style
+    size_description     → size
+    item_form            → item_form
     material_composition → material_composition
     recommended_uses     → recommended_uses_for_product
     manufacturer         → manufacturer
     country_of_origin    → country_of_origin
+    brand                → brand
+    part_number          → part_number
+    model_number         → model_number
 
 Nothing else is touched — no price, quantity, title, bullets, shipping, or variations.
 
@@ -235,6 +240,14 @@ def build_patches(row: dict, mkt: str) -> list:
         p.append({'op': 'replace', 'path': '/attributes/style',
                   'value': _txt(g('style'), mkt)})
 
+    if g('size_description'):
+        p.append({'op': 'replace', 'path': '/attributes/size',
+                  'value': _txt(g('size_description'), mkt)})
+
+    if g('item_form'):
+        p.append({'op': 'replace', 'path': '/attributes/item_form',
+                  'value': _txt(g('item_form'), mkt)})
+
     if g('material_composition'):
         p.append({'op': 'replace', 'path': '/attributes/material_composition',
                   'value': _txt(g('material_composition'), mkt)})
@@ -250,6 +263,18 @@ def build_patches(row: dict, mkt: str) -> list:
     if g('country_of_origin'):
         p.append({'op': 'replace', 'path': '/attributes/country_of_origin',
                   'value': _plain(g('country_of_origin'), mkt)})
+
+    if g('brand'):
+        p.append({'op': 'replace', 'path': '/attributes/brand',
+                  'value': _plain(g('brand'), mkt)})
+
+    if g('part_number'):
+        p.append({'op': 'replace', 'path': '/attributes/part_number',
+                  'value': _plain(g('part_number'), mkt)})
+
+    if g('model_number'):
+        p.append({'op': 'replace', 'path': '/attributes/model_number',
+                  'value': _plain(g('model_number'), mkt)})
 
     return p
 
@@ -319,8 +344,9 @@ def main():
     print(f'  Market : {creds["marketplace_id"]}')
     print(f'  Fields : description (incl. Q&A), subject, intended_use,')
     print(f'           target_audience, material_type, color, finish_type,')
-    print(f'           style, material_composition, recommended_uses,')
-    print(f'           manufacturer, country_of_origin')
+    print(f'           style, size, item_form, material_composition,')
+    print(f'           recommended_uses, manufacturer, country_of_origin,')
+    print(f'           brand, part_number, model_number')
     print(f'  API    : Listings Items 2021-08-01 (per-SKU PATCH)')
     print('═' * 60)
 
