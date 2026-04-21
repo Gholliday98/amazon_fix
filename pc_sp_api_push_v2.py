@@ -276,6 +276,12 @@ def build_patches(row: dict, mkt: str) -> list:
         p.append({'op': 'replace', 'path': '/attributes/model_number',
                   'value': _plain(g('model_number'), mkt)})
 
+    # contains_liquid_contents — always push this to clear the red flag.
+    # Optimizer sets 'Yes' only for adhesives (Weld-On), 'No' for everything else.
+    contains_liquid = g('contains_liquid') or 'No'
+    p.append({'op': 'replace', 'path': '/attributes/contains_liquid_contents',
+              'value': [{'value': contains_liquid == 'Yes', 'marketplace_id': mkt}]})
+
     return p
 
 
