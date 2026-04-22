@@ -97,6 +97,12 @@ _HARD_PATTERNS = [
      '', 'unregistered antimicrobial claim'),
     (re.compile(r'\brepels?\s+(?:bacteria|germs|microbes)\b', re.IGNORECASE),
      '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bresists?\s+(?:bacteria|germs|microbes|mold|mildew)\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\binhibits?\s+(?:bacteria|germ|microbial|mold|mildew)\s*(?:growth)?\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bprevents?\s+(?:bacterial|germ|microbial)\s+(?:growth|buildup|spread)\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
 
     # Unverified clinical / lab claims
     (re.compile(r'\bclinically[\s-](?:proven|tested|verified|studied)\b', re.IGNORECASE),
