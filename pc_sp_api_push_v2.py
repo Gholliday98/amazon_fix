@@ -297,20 +297,23 @@ def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
 
-    # ── Product description (includes embedded Q&A block) ─────────────────────
-    if g('description'):
+    def clean(v: str, field: str) -> str:
+        if _VALIDATOR_AVAILABLE and v:
+            v, _ = validate_and_fix(v, field)
+        return v
+
+    # ── Product description (policy-cleaned) ──────────────────────────────────
+    desc = clean(g('description'), 'description')
+    if desc:
         p.append({'op': 'replace', 'path': '/attributes/product_description',
-                  'value': _txt(g('description'), mkt)})
+                  'value': _txt(desc, mkt)})
 
     # ── Bullet points (policy-cleaned) ────────────────────────────────────────
     bullets = []
     for i in range(1, 6):
-        b = g(f'bullet{i}')
+        b = clean(g(f'bullet{i}'), f'bullet{i}')
         if b:
-            if _VALIDATOR_AVAILABLE:
-                b, _ = validate_and_fix(b, f'bullet{i}')
-            if b:
-                bullets.append({'value': b, 'language_tag': 'en_US', 'marketplace_id': mkt})
+            bullets.append({'value': b, 'language_tag': 'en_US', 'marketplace_id': mkt})
     if bullets:
         p.append({'op': 'replace', 'path': '/attributes/bullet_point', 'value': bullets})
 
@@ -323,50 +326,50 @@ def build_patches(row: dict, mkt: str) -> list:
             p.append({'op': 'replace', 'path': '/attributes/generic_keyword',
                       'value': _txt(bst, mkt)})
 
-    # ── Secondary characteristics ─────────────────────────────────────────────
-    if g('subject_matter'):
+    # ── Secondary characteristics (all policy-cleaned) ────────────────────────
+    if clean(g('subject_matter'), 'subject_matter'):
         p.append({'op': 'replace', 'path': '/attributes/subject_keyword',
-                  'value': _txt(g('subject_matter'), mkt)})
+                  'value': _txt(clean(g('subject_matter'), 'subject_matter'), mkt)})
 
-    if g('intended_use'):
+    if clean(g('intended_use'), 'intended_use'):
         p.append({'op': 'replace', 'path': '/attributes/intended_use',
-                  'value': _txt(g('intended_use'), mkt)})
+                  'value': _txt(clean(g('intended_use'), 'intended_use'), mkt)})
 
-    if g('target_audience'):
+    if clean(g('target_audience'), 'target_audience'):
         p.append({'op': 'replace', 'path': '/attributes/target_audience_keyword',
-                  'value': _txt(g('target_audience'), mkt)})
+                  'value': _txt(clean(g('target_audience'), 'target_audience'), mkt)})
 
-    if g('material_type'):
+    if clean(g('material_type'), 'material_type'):
         p.append({'op': 'replace', 'path': '/attributes/material_type',
-                  'value': _txt(g('material_type'), mkt)})
+                  'value': _txt(clean(g('material_type'), 'material_type'), mkt)})
 
-    if g('color'):
+    if clean(g('color'), 'color'):
         p.append({'op': 'replace', 'path': '/attributes/color',
-                  'value': _txt(g('color'), mkt)})
+                  'value': _txt(clean(g('color'), 'color'), mkt)})
 
-    if g('finish_type'):
+    if clean(g('finish_type'), 'finish_type'):
         p.append({'op': 'replace', 'path': '/attributes/finish_type',
-                  'value': _txt(g('finish_type'), mkt)})
+                  'value': _txt(clean(g('finish_type'), 'finish_type'), mkt)})
 
-    if g('style'):
+    if clean(g('style'), 'style'):
         p.append({'op': 'replace', 'path': '/attributes/style',
-                  'value': _txt(g('style'), mkt)})
+                  'value': _txt(clean(g('style'), 'style'), mkt)})
 
-    if g('size_description'):
+    if clean(g('size_description'), 'size_description'):
         p.append({'op': 'replace', 'path': '/attributes/size',
-                  'value': _txt(g('size_description'), mkt)})
+                  'value': _txt(clean(g('size_description'), 'size_description'), mkt)})
 
-    if g('item_form'):
+    if clean(g('item_form'), 'item_form'):
         p.append({'op': 'replace', 'path': '/attributes/item_form',
-                  'value': _txt(g('item_form'), mkt)})
+                  'value': _txt(clean(g('item_form'), 'item_form'), mkt)})
 
-    if g('material_composition'):
+    if clean(g('material_composition'), 'material_composition'):
         p.append({'op': 'replace', 'path': '/attributes/material_composition',
-                  'value': _txt(g('material_composition'), mkt)})
+                  'value': _txt(clean(g('material_composition'), 'material_composition'), mkt)})
 
-    if g('recommended_uses'):
+    if clean(g('recommended_uses'), 'recommended_uses'):
         p.append({'op': 'replace', 'path': '/attributes/recommended_uses_for_product',
-                  'value': _txt(g('recommended_uses'), mkt)})
+                  'value': _txt(clean(g('recommended_uses'), 'recommended_uses'), mkt)})
 
     if g('manufacturer'):
         p.append({'op': 'replace', 'path': '/attributes/manufacturer',

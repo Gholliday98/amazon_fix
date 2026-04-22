@@ -62,6 +62,20 @@ _HARD_PATTERNS = [
     (re.compile(r'\bplease\s+(?:rate|review|leave)\b', re.IGNORECASE),
      '', 'feedback solicitation'),
 
+    # FDA / EPA / regulatory claims (prohibited without actual registration)
+    (re.compile(r'\bFDA[\s-](?:approved|cleared|registered|compliant|certified|listed)\b', re.IGNORECASE),
+     '', 'unverified FDA claim'),
+    (re.compile(r'\bEPA[\s-](?:approved|registered|certified|compliant)\b', re.IGNORECASE),
+     '', 'unverified EPA claim'),
+    (re.compile(r'\bUSDA[\s-](?:approved|certified|compliant)\b', re.IGNORECASE),
+     '', 'unverified USDA claim'),
+    (re.compile(r'\bapproved\s+by\s+(?:the\s+)?(?:FDA|EPA|USDA)\b', re.IGNORECASE),
+     '', 'unverified regulatory approval claim'),
+    (re.compile(r'\bregistered\s+with\s+(?:the\s+)?(?:FDA|EPA)\b', re.IGNORECASE),
+     '', 'unverified regulatory registration claim'),
+    (re.compile(r'\bcertified\s+by\s+(?:the\s+)?(?:FDA|EPA|USDA)\b', re.IGNORECASE),
+     '', 'unverified regulatory certification claim'),
+
     # Antimicrobial / pesticide claims (requires EPA registration — hard ban)
     (re.compile(r'\bbacteria[\s-]free\b', re.IGNORECASE),
      '', 'unregistered antimicrobial claim'),
