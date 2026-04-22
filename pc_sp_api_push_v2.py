@@ -339,8 +339,6 @@ def load_rows(path: Path, limit: int = 0) -> list[dict]:
         for row in csv.DictReader(f):
             if not (row.get('sku', '') or '').strip():
                 continue
-            if not (row.get('description', '') or '').strip():
-                continue
             out.append(row)
             if limit and len(out) >= limit:
                 break
