@@ -61,6 +61,76 @@ _HARD_PATTERNS = [
      '', 'feedback solicitation'),
     (re.compile(r'\bplease\s+(?:rate|review|leave)\b', re.IGNORECASE),
      '', 'feedback solicitation'),
+
+    # Antimicrobial / pesticide claims (requires EPA registration — hard ban)
+    (re.compile(r'\bbacteria[\s-]free\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bgerm[\s-]free\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bmicrobe[\s-]free\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bpathogen[\s-]free\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bantimicrobial\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bantibacterial\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bantifungal\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\bkills?\s+(?:bacteria|germs|microbes|pathogens)\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\beliminates?\s+(?:bacteria|germs|microbes|odors?)\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\brepels?\s+(?:bacteria|germs|microbes)\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+
+    # Unverified clinical / lab claims
+    (re.compile(r'\bclinically[\s-](?:proven|tested|verified|studied)\b', re.IGNORECASE),
+     '', 'unverified clinical claim'),
+    (re.compile(r'\bscientifically[\s-](?:proven|tested|verified)\b', re.IGNORECASE),
+     '', 'unverified clinical claim'),
+    (re.compile(r'\b(?:lab|laboratory)[\s-](?:proven|tested|verified|certified)\b', re.IGNORECASE),
+     '', 'unverified lab claim'),
+    (re.compile(r'\bdoctor[\s-](?:approved|recommended|tested)\b', re.IGNORECASE),
+     '', 'unverified professional endorsement'),
+    (re.compile(r'\bdermatologist[\s-](?:approved|recommended|tested)\b', re.IGNORECASE),
+     '', 'unverified professional endorsement'),
+
+    # Chemical-free / toxic-free (scientifically misleading — Amazon prohibited)
+    (re.compile(r'\bchemical[\s-]free\b', re.IGNORECASE),
+     '', 'misleading chemical-free claim'),
+    (re.compile(r'\btoxin[\s-]free\b', re.IGNORECASE),
+     '', 'misleading toxin-free claim'),
+
+    # Unverified environmental claims (Amazon requires certification)
+    (re.compile(r'\beco[\s-]friendly\b', re.IGNORECASE),
+     '', 'unverified environmental claim'),
+    (re.compile(r'\benvironmentally[\s-]friendly\b', re.IGNORECASE),
+     '', 'unverified environmental claim'),
+    (re.compile(r'\b(?:100\s*%\s*)?sustainable\b', re.IGNORECASE),
+     '', 'unverified sustainability claim'),
+    (re.compile(r'\bgreen\s+(?:product|material|plastic|choice)\b', re.IGNORECASE),
+     '', 'unverified environmental claim'),
+    (re.compile(r'\ball[\s-]natural\b', re.IGNORECASE),
+     '', 'unverified natural claim'),
+    (re.compile(r'\b100\s*%\s*natural\b', re.IGNORECASE),
+     '', 'unverified natural claim'),
+    (re.compile(r'\bzero[\s-]waste\b', re.IGNORECASE),
+     '', 'unverified environmental claim'),
+    (re.compile(r'\bcarbon[\s-]neutral\b', re.IGNORECASE),
+     '', 'unverified environmental claim'),
+
+    # Media / external validation claims
+    (re.compile(r'\bas\s+seen\s+on\s+(?:tv|television|hgtv|cnn|fox|nbc|abc|cbs)\b', re.IGNORECASE),
+     '', 'media claim'),
+    (re.compile(r'\bas\s+featured\s+in\b', re.IGNORECASE),
+     '', 'media claim'),
+
+    # Amazon program references (prohibited by Amazon ToS)
+    (re.compile(r"\bamazon'?s?\s+choice\b", re.IGNORECASE),
+     '', "Amazon program reference"),
+    (re.compile(r'\bbest\s+seller\s+(?:badge|rank|status)\b', re.IGNORECASE),
+     '', 'Amazon program reference'),
 ]
 
 # ── Soft prohibited patterns ───────────────────────────────────────────────────
@@ -104,6 +174,54 @@ _SOFT_PATTERNS = [
     # "Perfect for" — Amazon flags this as vague
     (re.compile(r'\bperfect\s+for\b', re.IGNORECASE),
      'ideal for', '"perfect for" superlative'),
+
+    # "Superior" without data
+    (re.compile(r'\bsuperior\s+(?:quality|performance|strength|durability|clarity|product|material|plastic)\b', re.IGNORECASE),
+     'high-quality', '"superior" superlative'),
+    (re.compile(r'\bof\s+superior\s+quality\b', re.IGNORECASE),
+     'of certified quality', '"superior quality" superlative'),
+
+    # "Top quality" / "top-tier"
+    (re.compile(r'\btop[\s-](?:quality|tier|grade|notch)\b', re.IGNORECASE),
+     'certified quality', '"top quality" superlative'),
+
+    # "State-of-the-art" / "cutting-edge" / "revolutionary"
+    (re.compile(r'\bstate[\s-]of[\s-]the[\s-]art\b', re.IGNORECASE),
+     'advanced', '"state-of-the-art" superlative'),
+    (re.compile(r'\bcutting[\s-]edge\b', re.IGNORECASE),
+     'advanced', '"cutting-edge" superlative'),
+    (re.compile(r'\brevolutionary\b', re.IGNORECASE),
+     'innovative', '"revolutionary" superlative'),
+    (re.compile(r'\bgroundbreaking\b', re.IGNORECASE),
+     'innovative', '"groundbreaking" superlative'),
+    (re.compile(r'\bbreakthrough\b', re.IGNORECASE),
+     'innovative', '"breakthrough" superlative'),
+
+    # "Award-winning" without specifying the award
+    (re.compile(r'\baward[\s-]winning\b', re.IGNORECASE),
+     'highly rated', '"award-winning" unverified claim'),
+
+    # Germ/bacteria resistance claims (softer form — replace rather than remove)
+    (re.compile(r'\bgerm[\s-]resistant\b', re.IGNORECASE),
+     'easy to clean', 'germ-resistant claim'),
+    (re.compile(r'\bbacteria[\s-]resistant\b', re.IGNORECASE),
+     'easy to clean', 'bacteria-resistant claim'),
+    (re.compile(r'\bmold[\s-]resistant\b', re.IGNORECASE),
+     'easy to clean and maintain', 'mold-resistant claim'),
+
+    # "Proven" as standalone unverified marketing term
+    (re.compile(r'\btime[\s-]proven\b', re.IGNORECASE),
+     'trusted', '"time-proven" unverified claim'),
+    (re.compile(r'\btried[\s-]and[\s-](?:true|proven|tested)\b', re.IGNORECASE),
+     'trusted', '"tried-and-proven" unverified claim'),
+
+    # "Ultimate" as superlative
+    (re.compile(r'\bthe\s+ultimate\s+(?:\w+\s+){0,3}(?:solution|choice|option|material|plastic)\b', re.IGNORECASE),
+     'an excellent choice', '"ultimate" superlative'),
+
+    # "Guaranteed" used outside money-back context
+    (re.compile(r'\bguaranteed\s+(?:to|for|by)\b', re.IGNORECASE),
+     'designed to', '"guaranteed to" claim'),
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
