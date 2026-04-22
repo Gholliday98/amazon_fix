@@ -64,6 +64,12 @@ except ImportError:
     print('[ERROR] requests not installed.  Run: pip install requests')
     sys.exit(1)
 
+try:
+    from pc_policy_validator import validate_and_fix, check_backend_terms
+    _VALIDATOR_AVAILABLE = True
+except ImportError:
+    _VALIDATOR_AVAILABLE = False
+
 # ─── Paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR   = Path(__file__).parent
 RUN_ID       = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -247,6 +253,27 @@ def build_patches(row: dict, mkt: str) -> list:
     if g('description'):
         p.append({'op': 'replace', 'path': '/attributes/product_description',
                   'value': _txt(g('description'), mkt)})
+
+    # ── Bullet points (policy-cleaned) ────────────────────────────────────────
+    bullets = []
+    for i in range(1, 6):
+        b = g(f'bullet{i}')
+        if b:
+            if _VALIDATOR_AVAILABLE:
+                b, _ = validate_and_fix(b, f'bullet{i}')
+            if b:
+                bullets.append({'value': b, 'language_tag': 'en_US', 'marketplace_id': mkt})
+    if bullets:
+        p.append({'op': 'replace', 'path': '/attributes/bullet_point', 'value': bullets})
+
+    # ── Backend search terms (policy-cleaned) ─────────────────────────────────
+    if g('backend_search_terms'):
+        bst = g('backend_search_terms')
+        if _VALIDATOR_AVAILABLE:
+            bst, _ = check_backend_terms(bst)
+        if bst:
+            p.append({'op': 'replace', 'path': '/attributes/generic_keyword',
+                      'value': _txt(bst, mkt)})
 
     # ── Secondary characteristics ─────────────────────────────────────────────
     if g('subject_matter'):
