@@ -53,6 +53,7 @@ import csv
 import glob
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -230,16 +231,63 @@ _SKIP_ATTRS_BY_TYPE = {
         'subject_keyword', 'intended_use', 'target_audience_keyword',
         'material_type', 'finish_type', 'material_composition',
         'recommended_uses_for_product', 'batteries_required', 'batteries_included',
-        'item_form', 'style',
+        'item_form', 'style', 'contains_liquid_contents',
+    },
+    'CUTTING_BOARD': {
+        'subject_keyword', 'intended_use', 'target_audience_keyword',
+        'material_type', 'finish_type', 'material_composition',
+        'recommended_uses_for_product', 'batteries_required', 'batteries_included',
+        'item_form', 'contains_liquid_contents',
     },
     'PRODUCT': {
         'batteries_required', 'batteries_included',
     },
 }
 
+# Runtime-learned skips: populated from 90000900 warnings during the run.
+# Format: { product_type: set_of_attr_path_suffixes }
+_dynamic_skip: dict = {}
+
+_WARN_ATTR_RE = re.compile(r'attribute\s+(.+?)\s+that does not belong', re.IGNORECASE)
+
+# Map display names Amazon returns in warnings → API path suffix
+_DISPLAY_TO_ATTR = {
+    'material composition':             'material_composition',
+    'finish type':                      'finish_type',
+    'item form':                        'item_form',
+    'target audience keyword':          'target_audience_keyword',
+    'contains liquid contents?':        'contains_liquid_contents',
+    'contains liquid contents':         'contains_liquid_contents',
+    'subject keyword':                  'subject_keyword',
+    'intended use':                     'intended_use',
+    'are batteries required?':          'batteries_required',
+    'are batteries included?':          'batteries_included',
+    'batteries required':               'batteries_required',
+    'batteries included':               'batteries_included',
+    'recommended uses for product':     'recommended_uses_for_product',
+    'style':                            'style',
+    'material_type':                    'material_type',
+    'size':                             'size',
+    'color':                            'color',
+}
+
+
+def _learn_from_warnings(product_type: str, warn_issues: list) -> None:
+    """Extract 90000900 attribute names from warnings and cache them."""
+    for issue in warn_issues:
+        if issue.get('code') != '90000900':
+            continue
+        m = _WARN_ATTR_RE.search(issue.get('message', ''))
+        if not m:
+            continue
+        display = m.group(1).strip().lower()
+        attr = _DISPLAY_TO_ATTR.get(display, display.replace(' ', '_').replace('?', ''))
+        _dynamic_skip.setdefault(product_type, set()).add(attr)
+
 
 def filter_patches(patches: list, product_type: str) -> list:
-    skip = _SKIP_ATTRS_BY_TYPE.get(product_type, set())
+    skip = set(_SKIP_ATTRS_BY_TYPE.get(product_type, set()))
+    skip |= _dynamic_skip.get(product_type, set())
     if not skip:
         return patches
     return [p for p in patches if p['path'].split('/')[-1] not in skip]
@@ -562,6 +610,8 @@ def main():
                            'Rejected', msg)
                     stats['error'] += 1
                 else:
+                    if warn_issues:
+                        _learn_from_warnings(product_type, warn_issues)
                     warn_note = ''
                     if warn_issues:
                         warn_note = '  WARNINGS: ' + '; '.join(
