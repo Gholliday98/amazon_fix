@@ -217,6 +217,28 @@ def _country_code(v: str) -> str:
     return _COUNTRY_MAP.get(v.lower(), v)
 
 
+# Attributes that Amazon rejects (90000900) for specific product types.
+# Keyed by productType; values are the trailing path segment of the attribute.
+_SKIP_ATTRS_BY_TYPE = {
+    'RAW_MATERIALS': {
+        'subject_keyword', 'intended_use', 'target_audience_keyword',
+        'material_type', 'finish_type', 'material_composition',
+        'recommended_uses_for_product', 'batteries_required', 'batteries_included',
+        'item_form', 'style',
+    },
+    'PRODUCT': {
+        'batteries_required', 'batteries_included',
+    },
+}
+
+
+def filter_patches(patches: list, product_type: str) -> list:
+    skip = _SKIP_ATTRS_BY_TYPE.get(product_type, set())
+    if not skip:
+        return patches
+    return [p for p in patches if p['path'].split('/')[-1] not in skip]
+
+
 def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
@@ -481,6 +503,7 @@ def main():
                 time.sleep(REQUEST_GAP)
                 continue
 
+            patches = filter_patches(patches, product_type)
             print(f'    productType: {product_type}  →  PATCH {len(patches)} field(s)')
             time.sleep(REQUEST_GAP)
 
