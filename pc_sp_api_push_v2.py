@@ -202,6 +202,21 @@ def _plain(v: str, mkt: str) -> list:
     return [{'value': v, 'marketplace_id': mkt}]
 
 
+_COUNTRY_MAP = {
+    'united states': 'US', 'united states of america': 'US', 'usa': 'US', 'u.s.a.': 'US', 'u.s.': 'US',
+    'canada': 'CA', 'mexico': 'MX', 'china': 'CN', 'germany': 'DE', 'japan': 'JP',
+    'united kingdom': 'GB', 'uk': 'GB', 'france': 'FR', 'italy': 'IT', 'spain': 'ES',
+    'south korea': 'KR', 'korea': 'KR', 'taiwan': 'TW', 'india': 'IN', 'vietnam': 'VN',
+    'brazil': 'BR', 'australia': 'AU', 'netherlands': 'NL', 'poland': 'PL', 'sweden': 'SE',
+}
+
+def _country_code(v: str) -> str:
+    """Convert full country name to ISO 3166-1 alpha-2 code if needed."""
+    if len(v) == 2 and v.isupper():
+        return v  # already a code
+    return _COUNTRY_MAP.get(v.lower(), v)
+
+
 def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
@@ -262,7 +277,7 @@ def build_patches(row: dict, mkt: str) -> list:
 
     if g('country_of_origin'):
         p.append({'op': 'replace', 'path': '/attributes/country_of_origin',
-                  'value': _plain(g('country_of_origin'), mkt)})
+                  'value': _plain(_country_code(g('country_of_origin')), mkt)})
 
     if g('brand'):
         p.append({'op': 'replace', 'path': '/attributes/brand',
