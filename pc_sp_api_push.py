@@ -467,12 +467,14 @@ def main():
             title = (row.get('new_title', '') or '').strip()
 
             # Dimension repair preview (same logic as build_patches)
+            original_title = title
             title, dim_repaired = _inject_sku_dims(title, sku)
 
             if dim_repaired:
                 stats['dim_repaired'] += 1
                 print(f'  [{n}/{len(rows)}] {sku}  [DIM REPAIRED]')
-                print(f'    → {title}')
+                print(f'    WAS: {original_title}')
+                print(f'    NOW: {title}')
             else:
                 print(f'  [{n}/{len(rows)}] {sku}')
 
