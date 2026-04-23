@@ -43,6 +43,7 @@ import csv
 import glob
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -220,13 +221,111 @@ def _dims(l: str, w: str, h: str, mkt: str):
              'marketplace_id': mkt}]
 
 
+# ─── SKU Dimension Parser ──────────────────────────────────────────────────────
+# Plastic-Craft SKU format: [MATERIAL_CODE]_W{width}L{length}[V{thick_x100}][Q{qty}]
+# Examples:
+#   PP91_W24L36V10  → width=24", length=36", thickness=0.10"
+#   AC485_L24Q6     → length=24", quantity=6
+# The optimizer's all([t,w,l]) bug drops dims when V can't be parsed.  This
+# parser rebuilds them from the SKU so titles are unique and ASIN-matched.
+
+def _parse_sku_dims(sku: str) -> dict:
+    """Parse W, L, V, Q dimension codes from a Plastic-Craft SKU string."""
+    dims = {}
+    u = sku.upper()
+    for code, key, divisor, lo, hi in [
+        ('W', 'width',     1,     1,   200),
+        ('L', 'length',    1,     1,   200),
+        ('V', 'thickness', 100,   0.001, 5),
+    ]:
+        m = re.search(rf'(?:^|[^A-Z]){code}(\d+(?:\.\d+)?)(?=[^0-9]|$)', u)
+        if m:
+            try:
+                v = float(m.group(1)) / divisor
+                if lo < v < hi:
+                    dims[key] = v
+            except ValueError:
+                pass
+    m = re.search(r'(?:^|[^A-Z])Q(\d+)(?=[^0-9]|$)', u)
+    if m:
+        try:
+            q = int(m.group(1))
+            if 1 <= q <= 999:
+                dims['quantity'] = q
+        except ValueError:
+            pass
+    return dims
+
+
+_COMMON_FRACS = {
+    0.0625: '1/16', 0.125: '1/8', 0.1875: '3/16', 0.25: '1/4',
+    0.3125: '5/16', 0.375: '3/8', 0.4375: '7/16', 0.5: '1/2',
+    0.5625: '9/16', 0.625: '5/8', 0.6875: '11/16', 0.75: '3/4',
+    0.8125: '13/16', 0.875: '7/8', 0.9375: '15/16',
+}
+
+def _fmt_dim(v: float) -> str:
+    """Format a dimension value: whole number → '24"', common fraction → '1/4"', else decimal."""
+    if v == int(v):
+        return f'{int(v)}"'
+    for dec, frac in _COMMON_FRACS.items():
+        if abs(v - dec) < 0.001:
+            return f'{frac}"'
+    return f'{v:.4g}"'
+
+
+_DIM_PRESENT_RE = re.compile(
+    r'\d+["\']?\s*(?:thick|w\b|l\b|wide|long)\b'
+    r'|\d+["\']?\s*[wx]\s*\d+',
+    re.IGNORECASE
+)
+
+def _title_has_dims(title: str) -> bool:
+    return bool(_DIM_PRESENT_RE.search(title))
+
+
+def _inject_sku_dims(title: str, sku: str) -> tuple:
+    """
+    Append W/L/thickness from SKU codes if the title is missing them.
+    Returns (new_title, was_modified).
+    Only activates when SKU contains W or L codes.
+    """
+    dims = _parse_sku_dims(sku)
+    if not dims.get('width') and not dims.get('length'):
+        return title, False
+    if _title_has_dims(title):
+        return title, False
+
+    w = dims.get('width')
+    l = dims.get('length')
+    t = dims.get('thickness')
+    q = dims.get('quantity')
+
+    parts = []
+    if t:
+        parts.append(f'{_fmt_dim(t)} Thick')
+    if w and l:
+        parts.append(f'{_fmt_dim(w)} W x {_fmt_dim(l)} L')
+    elif w:
+        parts.append(f'{_fmt_dim(w)} W')
+    elif l:
+        parts.append(f'{_fmt_dim(l)} L')
+    if q and q > 1:
+        parts.append(f'Pack of {q}')
+
+    new_title = title.rstrip(', ') + ', ' + ', '.join(parts)
+    return new_title, True
+
+
 def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
+    sku = (row.get('sku', '') or '').strip()
 
     if g('new_title'):
+        title, _ = _inject_sku_dims(g('new_title'), sku)
         p.append({'op': 'replace', 'path': '/attributes/item_name',
-                  'value': _txt(g('new_title'), mkt)})
+                  'value': _txt(title, mkt)})
 
     bullets = []
     for i in range(1, 6):
@@ -362,7 +461,7 @@ def main():
     tokens = TokenManager(creds)
     mkt    = creds['marketplace_id']
     seller = creds['seller_id']
-    stats  = {'success': 0, 'error': 0, 'skipped': 0, 'not_found': 0}
+    stats  = {'success': 0, 'error': 0, 'skipped': 0, 'not_found': 0, 'dim_repaired': 0}
 
     try:
         for n, row in enumerate(rows, 1):
@@ -370,7 +469,15 @@ def main():
             asin  = (row.get('asin', '') or '').strip()
             title = (row.get('new_title', '') or '').strip()
 
-            print(f'  [{n}/{len(rows)}] {sku}')
+            # Dimension repair preview (same logic as build_patches)
+            title, dim_repaired = _inject_sku_dims(title, sku)
+
+            if dim_repaired:
+                stats['dim_repaired'] += 1
+                print(f'  [{n}/{len(rows)}] {sku}  [DIM REPAIRED]')
+                print(f'    → {title}')
+            else:
+                print(f'  [{n}/{len(rows)}] {sku}')
 
             # ── Build patches ─────────────────────────────────────────────────
             patches = build_patches(row, mkt)
@@ -468,10 +575,12 @@ def main():
 
     print('\n' + '═' * 60)
     print('  DONE')
-    print(f'  Success   : {stats["success"]}')
-    print(f'  Errors    : {stats["error"]}')
-    print(f'  Not found : {stats["not_found"]}')
-    print(f'  Skipped   : {stats["skipped"]}')
+    print(f'  Success       : {stats["success"]}')
+    print(f'  Errors        : {stats["error"]}')
+    print(f'  Not found     : {stats["not_found"]}')
+    print(f'  Skipped       : {stats["skipped"]}')
+    if stats['dim_repaired']:
+        print(f'  Dims repaired : {stats["dim_repaired"]}  ← titles fixed from SKU codes')
     print(f'\n  Results → {RESULTS_FILE.name}')
     print('═' * 60 + '\n')
 
