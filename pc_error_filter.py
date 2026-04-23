@@ -126,22 +126,12 @@ def collect_report_skus(report_path: Path, label: str) -> dict:
         print(f'[ERROR] {label} report not found: {report_path}')
         return skus
 
-    # Detect delimiter and encoding
-    for enc in ('utf-8-sig', 'utf-16', 'utf-8'):
-        try:
-            with open(report_path, 'r', encoding=enc, errors='replace') as f:
-                sample = f.read(2048)
-            if 'seller-sku' in sample.lower() or 'sku' in sample.lower():
-                encoding = enc
-                break
-        except Exception:
-            continue
-    else:
-        encoding = 'utf-8-sig'
-
+    # Amazon reports use UTF-8 with BOM — utf-8-sig strips it automatically
+    with open(report_path, 'r', encoding='utf-8-sig', errors='replace') as f:
+        sample = f.read(2048)
     delimiter = '\t' if sample.count('\t') > sample.count(',') else ','
 
-    with open(report_path, newline='', encoding=encoding, errors='replace') as f:
+    with open(report_path, newline='', encoding='utf-8-sig', errors='replace') as f:
         reader = csv.DictReader(f, delimiter=delimiter)
         for row in reader:
             # Seller Central uses 'seller-sku' or 'SKU' depending on report type
