@@ -170,6 +170,76 @@ _HARD_PATTERNS = [
      '', "Amazon program reference"),
     (re.compile(r'\bbest\s+seller\s+(?:badge|rank|status)\b', re.IGNORECASE),
      '', 'Amazon program reference'),
+    (re.compile(r'\b(?:fulfilled\s+by\s+amazon|fba|ships?\s+from\s+amazon)\b', re.IGNORECASE),
+     '', 'Amazon program reference'),
+    (re.compile(r'\bprime\s+(?:eligible|shipping|delivery)\b', re.IGNORECASE),
+     '', 'Amazon Prime reference'),
+
+    # Price / comparison claims
+    (re.compile(r'\b(?:best|lowest|cheapest|unbeatable)\s+price\b', re.IGNORECASE),
+     '', 'price superlative'),
+    (re.compile(r'\bcompare\s+(?:at|to|with)\b', re.IGNORECASE),
+     '', 'comparative pricing claim'),
+    (re.compile(r'\bprice\s+match\b', re.IGNORECASE),
+     '', 'price match claim'),
+    (re.compile(r'\bmanufacturer[\s-]direct\b', re.IGNORECASE),
+     '', 'pricing/origin claim'),
+    (re.compile(r'\bbetter\s+than\s+(?:any|all|competitors?|the\s+rest)\b', re.IGNORECASE),
+     '', 'competitor comparison claim'),
+
+    # Urgency / scarcity (more variants)
+    (re.compile(r'\blast\s+chance\b', re.IGNORECASE),
+     '', 'urgency claim'),
+    (re.compile(r'\bhurry\b', re.IGNORECASE),
+     '', 'urgency claim'),
+    (re.compile(r"\bdon'?t\s+miss\b", re.IGNORECASE),
+     '', 'urgency claim'),
+    (re.compile(r'\bselling\s+(?:out\s+)?fast\b', re.IGNORECASE),
+     '', 'urgency claim'),
+    (re.compile(r'\bwhile\s+they\s+last\b', re.IGNORECASE),
+     '', 'urgency claim'),
+    (re.compile(r'\bclearance\b', re.IGNORECASE),
+     '', 'clearance claim'),
+
+    # Medical / therapeutic claims (hard ban without registration)
+    (re.compile(r'\btreats?\s+(?:infection|disease|illness|pain|symptoms?)\b', re.IGNORECASE),
+     '', 'medical treatment claim'),
+    (re.compile(r'\bcures?\s+\w+', re.IGNORECASE),
+     '', 'medical cure claim'),
+    (re.compile(r'\bheals?\s+(?:wounds?|cuts?|burns?|injuries?)\b', re.IGNORECASE),
+     '', 'medical healing claim'),
+    (re.compile(r'\brelieve[sd]?\s+(?:pain|stress|anxiety|symptoms?)\b', re.IGNORECASE),
+     '', 'medical relief claim'),
+    (re.compile(r'\btherapeutic\b', re.IGNORECASE),
+     '', 'therapeutic claim'),
+    (re.compile(r'\bmedical[\s-]grade\b', re.IGNORECASE),
+     '', 'unverified medical-grade claim'),
+    (re.compile(r'\bhospital[\s-]grade\b', re.IGNORECASE),
+     '', 'unverified hospital-grade claim'),
+    (re.compile(r'\bpharmaceutical[\s-]grade\b', re.IGNORECASE),
+     '', 'unverified pharmaceutical-grade claim'),
+
+    # Certification claims without proof (require substantiation)
+    (re.compile(r'\bBPA[\s-]free\b', re.IGNORECASE),
+     '', 'unverified BPA-free claim'),
+    (re.compile(r'\blead[\s-]free\b', re.IGNORECASE),
+     '', 'unverified lead-free claim'),
+    (re.compile(r'\bphthalate[\s-]free\b', re.IGNORECASE),
+     '', 'unverified phthalate-free claim'),
+    (re.compile(r'\bnon[\s-]toxic\b', re.IGNORECASE),
+     '', 'unverified non-toxic claim'),
+
+    # Pest / insect claims (trigger pesticide review)
+    (re.compile(r'\b(?:kills?|repels?|deters?)\s+(?:insects?|bugs?|pests?|rodents?|mice|rats?|ants?|roaches|mosquitoes)\b', re.IGNORECASE),
+     '', 'pesticide claim'),
+    (re.compile(r'\binsect[\s-](?:proof|resistant|repellent)\b', re.IGNORECASE),
+     '', 'pesticide claim'),
+    (re.compile(r'\bpest[\s-](?:proof|resistant|repellent|control)\b', re.IGNORECASE),
+     '', 'pesticide claim'),
+
+    # Comparison to banned competitor brand names in promotional context
+    (re.compile(r'\b(?:better|stronger|clearer|superior)\s+than\s+(?:plexiglas|lucite|lexan)\b', re.IGNORECASE),
+     '', 'competitor disparagement'),
 ]
 
 # ── Soft prohibited patterns ───────────────────────────────────────────────────
