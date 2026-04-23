@@ -440,6 +440,19 @@ def build_patches(row: dict, mkt: str) -> list:
 # Input + CLI
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def load_done_skus() -> set:
+    """Return the set of SKUs already successfully pushed in any previous v2 results file."""
+    done = set()
+    for f in glob.glob(str(SCRIPT_DIR / 'pc_push_v2_results_*.csv')):
+        with open(f, newline='', encoding='utf-8', errors='replace') as fh:
+            for row in csv.DictReader(fh):
+                if (row.get('status', '') or '').strip() == 'success':
+                    sku = (row.get('sku', '') or '').strip()
+                    if sku:
+                        done.add(sku)
+    return done
+
+
 def find_csv() -> Path:
     matches = glob.glob(str(SCRIPT_DIR / 'pc_amazon_feed_v4_*.csv'))
     if not matches:
@@ -470,6 +483,8 @@ def parse_args():
                     help='Cap to first N listings')
     ap.add_argument('--input', metavar='FILE',
                     help='Exact CSV file to use (default: most-recently-modified pc_amazon_feed_v4_*.csv)')
+    ap.add_argument('--resume', action='store_true',
+                    help='Skip SKUs already marked success in any previous pc_push_v2_results_*.csv')
     return ap.parse_args()
 
 
@@ -509,7 +524,15 @@ def main():
     if not rows:
         print('\n  No eligible rows (need non-empty sku + description).')
         return
-    print(f'\n  Loaded {len(rows)} listing(s)\n')
+
+    if args.resume:
+        done_skus = load_done_skus()
+        before = len(rows)
+        rows = [r for r in rows if (r.get('sku', '') or '').strip() not in done_skus]
+        skipped_done = before - len(rows)
+        print(f'\n  Loaded {before} listing(s) — skipping {skipped_done} already done → {len(rows)} remaining\n')
+    else:
+        print(f'\n  Loaded {len(rows)} listing(s)\n')
 
     # Results CSV
     fh = open(RESULTS_FILE, 'w', newline='', encoding='utf-8')
