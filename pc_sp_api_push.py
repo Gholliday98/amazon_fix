@@ -222,26 +222,26 @@ def _dims(l: str, w: str, h: str, mkt: str):
 
 
 # ─── SKU Dimension Parser ──────────────────────────────────────────────────────
-# Plastic-Craft SKU format: [MATERIAL_CODE]_W{width}L{length}[V{thick_x100}][Q{qty}]
+# Plastic-Craft SKU format: [MATERIAL_CODE]_W{width}L{length}[V{vendor}][Q{qty}]
 # Examples:
-#   PP91_W24L36V10  → width=24", length=36", thickness=0.10"
+#   PP91_W24L36V10  → width=24", length=36"  (V = vendor code, ignored)
 #   AC485_L24Q6     → length=24", quantity=6
-# The optimizer's all([t,w,l]) bug drops dims when V can't be parsed.  This
-# parser rebuilds them from the SKU so titles are unique and ASIN-matched.
+# The optimizer's all([t,w,l]) bug drops dims when thickness is missing.
+# We rebuild W/L from the SKU so every title is unique, stopping ASIN rematch.
 
 def _parse_sku_dims(sku: str) -> dict:
-    """Parse W, L, V, Q dimension codes from a Plastic-Craft SKU string."""
+    """Parse W, L, Q dimension codes from a Plastic-Craft SKU string.
+    V codes are vendor identifiers and are intentionally ignored."""
     dims = {}
     u = sku.upper()
-    for code, key, divisor, lo, hi in [
-        ('W', 'width',     1,     1,   200),
-        ('L', 'length',    1,     1,   200),
-        ('V', 'thickness', 100,   0.001, 5),
+    for code, key, lo, hi in [
+        ('W', 'width',  1, 200),
+        ('L', 'length', 1, 200),
     ]:
         m = re.search(rf'(?:^|[^A-Z]){code}(\d+(?:\.\d+)?)(?=[^0-9]|$)', u)
         if m:
             try:
-                v = float(m.group(1)) / divisor
+                v = float(m.group(1))
                 if lo < v < hi:
                     dims[key] = v
             except ValueError:
@@ -298,12 +298,9 @@ def _inject_sku_dims(title: str, sku: str) -> tuple:
 
     w = dims.get('width')
     l = dims.get('length')
-    t = dims.get('thickness')
     q = dims.get('quantity')
 
     parts = []
-    if t:
-        parts.append(f'{_fmt_dim(t)} Thick')
     if w and l:
         parts.append(f'{_fmt_dim(w)} W x {_fmt_dim(l)} L')
     elif w:
