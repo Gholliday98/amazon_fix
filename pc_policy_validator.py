@@ -237,6 +237,38 @@ _HARD_PATTERNS = [
     (re.compile(r'\bpest[\s-](?:proof|resistant|repellent|control)\b', re.IGNORECASE),
      '', 'pesticide claim'),
 
+    # Food safety / food contact claims (require FDA or NSF certification)
+    (re.compile(r'\bfood[\s-]grade\b', re.IGNORECASE),
+     '', 'unverified food-grade claim'),
+    (re.compile(r'\bfood[\s-]safe\b', re.IGNORECASE),
+     '', 'unverified food-safe claim'),
+    (re.compile(r'\bfood[\s-]contact\s+(?:safe|approved|rated|compliant)\b', re.IGNORECASE),
+     '', 'unverified food-contact claim'),
+    (re.compile(r'\bsafe\s+for\s+food\s+(?:contact|use|storage)\b', re.IGNORECASE),
+     '', 'unverified food-safe claim'),
+
+    # Third-party standards claims (require actual certification to substantiate)
+    (re.compile(r'\bRoHS[\s-](?:compliant|certified|approved|listed)\b', re.IGNORECASE),
+     '', 'unverified RoHS claim'),
+    (re.compile(r'\bNSF[\s-](?:certified|approved|compliant|listed|rated)\b', re.IGNORECASE),
+     '', 'unverified NSF claim'),
+    (re.compile(r'\bISO[\s-]?(?:\d{3,5}(?::\d{4})?[\s-]*)?(?:certified|compliant|approved|listed|standard)\b', re.IGNORECASE),
+     '', 'unverified ISO certification claim'),
+    (re.compile(r'\bASTM\s+[A-Z]\d+\b', re.IGNORECASE),
+     '', 'unverified ASTM standard reference'),
+    (re.compile(r'\bCE[\s-](?:certified|compliant|marked|approved|listed)\b', re.IGNORECASE),
+     '', 'unverified CE mark claim'),
+    (re.compile(r'\bUL[\s-](?:listed|certified|approved|rated)\b', re.IGNORECASE),
+     '', 'unverified UL listing claim'),
+    (re.compile(r'\bREACH[\s-](?:compliant|certified)\b', re.IGNORECASE),
+     '', 'unverified REACH compliance claim'),
+    (re.compile(r'\bOSHA[\s-](?:compliant|approved|certified)\b', re.IGNORECASE),
+     '', 'unverified OSHA claim'),
+
+    # All guarantee language (including "guaranteed optical clarity", etc.)
+    (re.compile(r'\bguarantee[d]?\b', re.IGNORECASE),
+     '', 'guarantee claim'),
+
     # Comparison to banned competitor brand names in promotional context
     (re.compile(r'\b(?:better|stronger|clearer|superior)\s+than\s+(?:plexiglas|lucite|lexan)\b', re.IGNORECASE),
      '', 'competitor disparagement'),
@@ -264,7 +296,7 @@ _SOFT_PATTERNS = [
 
     # "Highest quality" without data
     (re.compile(r'\bhighest[\s-]quality\b', re.IGNORECASE),
-     'ISO 9001:2015 certified quality', '"highest quality" superlative'),
+     'precision-manufactured', '"highest quality" superlative'),
 
     # "World-class" / "industry-leading"
     (re.compile(r'\bworld[\s-]class\b', re.IGNORECASE),
@@ -288,11 +320,11 @@ _SOFT_PATTERNS = [
     (re.compile(r'\bsuperior\s+(?:quality|performance|strength|durability|clarity|product|material|plastic)\b', re.IGNORECASE),
      'high-quality', '"superior" superlative'),
     (re.compile(r'\bof\s+superior\s+quality\b', re.IGNORECASE),
-     'of certified quality', '"superior quality" superlative'),
+     'of exceptional quality', '"superior quality" superlative'),
 
     # "Top quality" / "top-tier"
     (re.compile(r'\btop[\s-](?:quality|tier|grade|notch)\b', re.IGNORECASE),
-     'certified quality', '"top quality" superlative'),
+     'high-quality', '"top quality" superlative'),
 
     # "State-of-the-art" / "cutting-edge" / "revolutionary"
     (re.compile(r'\bstate[\s-]of[\s-]the[\s-]art\b', re.IGNORECASE),
@@ -327,10 +359,6 @@ _SOFT_PATTERNS = [
     # "Ultimate" as superlative
     (re.compile(r'\bthe\s+ultimate\s+(?:\w+\s+){0,3}(?:solution|choice|option|material|plastic)\b', re.IGNORECASE),
      'an excellent choice', '"ultimate" superlative'),
-
-    # "Guaranteed" used outside money-back context
-    (re.compile(r'\bguaranteed\s+(?:to|for|by)\b', re.IGNORECASE),
-     'designed to', '"guaranteed to" claim'),
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
