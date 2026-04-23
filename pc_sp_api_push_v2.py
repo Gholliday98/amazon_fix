@@ -182,6 +182,66 @@ def get_listing_product_type(tokens: TokenManager, seller_id: str,
     return None
 
 
+# Cache: product_type → set of valid attribute names
+_SCHEMA_CACHE: dict = {}
+
+def get_valid_attrs(tokens: TokenManager, marketplace_id: str,
+                    product_type: str) -> set | None:
+    """
+    Fetch the Product Type Definition schema from Amazon and return the set
+    of attribute names that are valid for this product type.
+    Returns None if the call fails (caller falls back to static skip list).
+    Results are cached — one API call per product type per run.
+    """
+    if product_type in _SCHEMA_CACHE:
+        return _SCHEMA_CACHE[product_type]
+
+    r = sp_request('GET', f'/definitions/2020-09-01/productTypes/{product_type}',
+                   tokens, params={
+                       'marketplaceIds': marketplace_id,
+                       'requirements': 'LISTING',
+                   })
+    if not r.ok:
+        _SCHEMA_CACHE[product_type] = None
+        return None
+
+    try:
+        schema = r.json().get('schema', {})
+        props  = schema.get('properties', {})
+        valid  = set(props.keys()) if props else None
+        _SCHEMA_CACHE[product_type] = valid
+        if valid:
+            print(f'    [SCHEMA] {product_type}: {len(valid)} valid attributes cached')
+        return valid
+    except Exception:
+        _SCHEMA_CACHE[product_type] = None
+        return None
+
+
+def filter_patches(patches: list, product_type: str,
+                   tokens: TokenManager | None = None,
+                   marketplace_id: str = '') -> list:
+    """
+    Remove patches for attributes that don't belong to this product type.
+    Priority: live schema from Amazon > static skip list > dynamic learning.
+    """
+    # Try live schema first
+    if tokens and marketplace_id:
+        valid = get_valid_attrs(tokens, marketplace_id, product_type)
+        if valid:
+            filtered = [p for p in patches if p['path'].split('/')[-1] in valid]
+            # Still apply dynamic skips on top (catches anything schema misses)
+            dyn = _dynamic_skip.get(product_type, set())
+            return [p for p in filtered if p['path'].split('/')[-1] not in dyn]
+
+    # Fallback: static + dynamic skip lists
+    skip = set(_SKIP_ATTRS_BY_TYPE.get(product_type, set()))
+    skip |= _dynamic_skip.get(product_type, set())
+    if not skip:
+        return patches
+    return [p for p in patches if p['path'].split('/')[-1] not in skip]
+
+
 def patch_listing(tokens: TokenManager, seller_id: str, marketplace_id: str,
                    sku: str, product_type: str, patches: list) -> tuple[int, dict]:
     """PATCH a listing.  Returns (status_code, response_json)."""
@@ -604,7 +664,7 @@ def main():
                 time.sleep(REQUEST_GAP)
                 continue
 
-            patches = filter_patches(patches, product_type)
+            patches = filter_patches(patches, product_type, tokens, mkt)
             print(f'    productType: {product_type}  →  PATCH {len(patches)} field(s)')
             time.sleep(REQUEST_GAP)
 
