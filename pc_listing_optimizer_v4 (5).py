@@ -1392,8 +1392,9 @@ def extract_dimensions(title):
 
     try:
         if ptype in ('sheet', 'cutting_board', 'cutting_board_oem'):
-            # Thickness
-            thick = re.search(rf'{num}["\s]*(?:thick|t\b)', title_normalized, re.IGNORECASE)
+            # Thickness — allow optional parenthetical between value and keyword,
+            # e.g. "0.1181" (1/8") Thick" which results from MM conversion of "3MM (1/8") Thick"
+            thick = re.search(rf'{num}["\s]*(?:\([^)]*\)\s*)?(?:thick|t\b)', title_normalized, re.IGNORECASE)
             # Width x Length
             wl = re.search(rf'{num}["\s]*w?\s*x\s*{num}["\s]*l?', title_normalized, re.IGNORECASE)
 
