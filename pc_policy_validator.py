@@ -104,6 +104,25 @@ _HARD_PATTERNS = [
     (re.compile(r'\bprevents?\s+(?:bacterial|germ|microbial)\s+(?:growth|buildup|spread)\b', re.IGNORECASE),
      '', 'unregistered antimicrobial claim'),
 
+    # Sterilization claims — Amazon reads as pesticide/antimicrobial claim
+    (re.compile(r'\bsteriliz(?:e|ed|able|ation|ing)\b', re.IGNORECASE),
+     '', 'sterilization claim (pesticide flag)'),
+    (re.compile(r'\bautoclavable\b', re.IGNORECASE),
+     'heat resistant', 'autoclavable → heat resistant'),
+
+    # Sanitizer references — using "sanitizer" as a claim is flagged
+    (re.compile(r'\bsanitiz(?:e|er|ers|ed|able|ation|ing)\b', re.IGNORECASE),
+     '', 'sanitizer/sanitize claim (pesticide flag)'),
+    (re.compile(r'\bdisinfect(?:s|ed|ant|ion|ing)?\b', re.IGNORECASE),
+     '', 'disinfectant claim (pesticide flag)'),
+
+    # "Resists chemicals" is fine, but "resists bacteria/pathogens" isn't.
+    # Catch any resist/-resistant to biological entities
+    (re.compile(r'\bresists?\s+(?:pathogens?|viruses?|fungi|microorganisms?)\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+    (re.compile(r'\b(?:pathogen|virus|fungi|microorganism)[\s-]resistant\b', re.IGNORECASE),
+     '', 'unregistered antimicrobial claim'),
+
     # Unverified clinical / lab claims
     (re.compile(r'\bclinically[\s-](?:proven|tested|verified|studied)\b', re.IGNORECASE),
      '', 'unverified clinical claim'),
