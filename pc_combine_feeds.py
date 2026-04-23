@@ -20,6 +20,7 @@ RUN_ID     = datetime.now().strftime('%Y%m%d_%H%M%S')
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--inactive', metavar='FILE', help='Inactive Listings Report from Seller Central')
+    ap.add_argument('--report',   metavar='FILE', help='Amazon All Listings Report (auto-detected if omitted)')
     ap.add_argument('--output',   metavar='FILE', help='Output filename (auto-named if omitted)')
     args = ap.parse_args()
 
@@ -61,15 +62,21 @@ def main():
         return
 
     # ── 3. Find All Listings Report ───────────────────────────────────────────
-    all_reports = (
-        glob.glob(str(SCRIPT_DIR / '*All*Listings*Report*.txt')) +
-        glob.glob(str(SCRIPT_DIR / '*All_Listings*.txt')) +
-        glob.glob(str(SCRIPT_DIR / '*.txt'))
-    )
-    if not all_reports:
-        print('[ERROR] No All Listings Report .txt found in the amazon-fix folder.')
-        return
-    report_path = Path(max(all_reports, key=os.path.getmtime))
+    if args.report:
+        report_path = Path(args.report)
+        if not report_path.is_absolute():
+            report_path = SCRIPT_DIR / report_path
+    else:
+        candidates = [
+            p for p in (
+                glob.glob(str(SCRIPT_DIR / '*All*Listings*Report*.txt')) +
+                glob.glob(str(SCRIPT_DIR / '*All_Listings*.txt'))
+            ) if 'pc_error_feed' not in p and 'pc_combine' not in p
+        ]
+        if not candidates:
+            print('[ERROR] No All Listings Report found. Pass --report <filename>')
+            return
+        report_path = Path(max(candidates, key=os.path.getmtime))
     print(f'All Listings file : {report_path.name}')
 
     # ── 4. Filter and write ───────────────────────────────────────────────────
