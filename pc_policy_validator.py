@@ -377,7 +377,7 @@ _SOFT_PATTERNS = [
 
     # "The only" claims — broadened to catch "the only common/known/true X"
     (re.compile(r'\bthe\s+only\s+(?:\w+\s+){0,3}(?:plastic|material|product|polymer)\b', re.IGNORECASE),
-     'a', '"the only" unverified claim'),
+     'a high-performance plastic', '"the only" unverified claim'),
 
     # Unverifiable quantitative performance claims
     (re.compile(r'\bmillions?\s+of\s+times\b', re.IGNORECASE),
@@ -442,8 +442,9 @@ def validate_and_fix(text: str, field: str = 'text') -> tuple[str, list[str]]:
             clean = pattern.sub(replacement, clean)
             violations.append(f'[SOFT] {field}: {label} — replaced with "{replacement}"')
 
-    # Collapse multiple spaces left by removals
-    clean = re.sub(r'  +', ' ', clean).strip()
+    # Collapse multiple spaces and blank lines left by removals
+    clean = re.sub(r'  +', ' ', clean)
+    clean = re.sub(r'\n{3,}', '\n\n', clean).strip()
 
     return clean, violations
 
