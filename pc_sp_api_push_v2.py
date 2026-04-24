@@ -407,9 +407,11 @@ def build_patches(row: dict, mkt: str) -> list:
         p.append({'op': 'replace', 'path': '/attributes/style',
                   'value': _txt(clean(g('style'), 'style'), mkt)})
 
-    if clean(g('size_description'), 'size_description'):
+    size_val = clean(g('size_description'), 'size_description')
+    if size_val:
+        size_val = size_val[:50].rsplit(' ', 1)[0] if len(size_val) > 50 else size_val
         p.append({'op': 'replace', 'path': '/attributes/size',
-                  'value': _txt(clean(g('size_description'), 'size_description'), mkt)})
+                  'value': _txt(size_val, mkt)})
 
     if clean(g('item_form'), 'item_form'):
         p.append({'op': 'replace', 'path': '/attributes/item_form',
