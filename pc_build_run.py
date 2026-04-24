@@ -19,6 +19,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+
+
 SCRIPT_DIR = Path(__file__).parent
 RUN_ID     = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -82,6 +84,8 @@ def main():
         epilog=__doc__)
     ap.add_argument('--material', metavar='KEYWORD',
                     help='Filter by material keyword in title (e.g. HDPE, "cutting board", Polypropylene)')
+    ap.add_argument('--asins', metavar='ASIN1,ASIN2,...',
+                    help='Comma-separated list of ASINs to extract')
     ap.add_argument('--errors-only', action='store_true',
                     help='Only include SKUs that errored in previous push runs')
     ap.add_argument('--report', metavar='FILE',
@@ -90,13 +94,18 @@ def main():
                     help='Output filename (auto-named if omitted)')
     args = ap.parse_args()
 
-    if not args.material and not args.errors_only:
-        print('[ERROR] Specify --material and/or --errors-only')
+    if not args.material and not args.errors_only and not args.asins:
+        print('[ERROR] Specify --material, --asins, and/or --errors-only')
         raise SystemExit(1)
+
+    asin_set = set()
+    if args.asins:
+        asin_set = {a.strip().upper() for a in args.asins.split(',') if a.strip()}
 
     print(f'\n{"═" * 60}')
     print('  PC Build Run')
     print(f'  Material filter : {args.material or "none"}')
+    print(f'  ASIN filter     : {len(asin_set) if asin_set else "none"}')
     print(f'  Errors only     : {args.errors_only}')
     print(f'{"═" * 60}\n')
 
@@ -107,7 +116,7 @@ def main():
     report_path = find_listings_report(args.report or '')
 
     # Output path
-    material_slug = (args.material or 'all').lower().replace(' ', '_')
+    material_slug = (args.material or 'asins' if asin_set else 'all').lower().replace(' ', '_')
     suffix = '_errors' if args.errors_only else ''
     output_path = Path(args.output) if args.output else \
         SCRIPT_DIR / f'pc_run_{material_slug}{suffix}_{RUN_ID}.txt'
@@ -116,6 +125,7 @@ def main():
     written = 0
     skipped_material = 0
     skipped_errors = 0
+    not_found = asin_set.copy()
 
     with open(report_path, 'r', encoding='utf-8-sig', errors='replace') as f:
         reader     = csv.DictReader(f, delimiter='\t')
@@ -127,13 +137,23 @@ def main():
             writer.writeheader()
 
             for row in reader:
-                title = (row.get('item-name') or '').strip()
-                sku   = (row.get('seller-sku') or '').strip()
+                title    = (row.get('item-name') or '').strip()
+                sku      = (row.get('seller-sku') or '').strip()
+                row_asin = (row.get('asin1') or '').strip().upper()
+
+                # ASIN filter
+                if asin_set:
+                    if row_asin in asin_set:
+                        not_found.discard(row_asin)
+                    elif not (args.material and args.material.lower() in title.lower()):
+                        skipped_material += 1
+                        continue
 
                 # Material filter
                 if args.material and args.material.lower() not in title.lower():
-                    skipped_material += 1
-                    continue
+                    if row_asin not in asin_set:
+                        skipped_material += 1
+                        continue
 
                 # Errors-only filter
                 if args.errors_only and sku not in error_skus:
@@ -145,8 +165,12 @@ def main():
 
     print(f'\n{"═" * 60}')
     print(f'  Rows written    : {written}')
-    if skipped_material: print(f'  Skipped (material filter) : {skipped_material}')
+    if skipped_material: print(f'  Skipped (no match)        : {skipped_material}')
     if skipped_errors:   print(f'  Skipped (no error)        : {skipped_errors}')
+    if not_found:
+        print(f'  ASINs not in report ({len(not_found)}):')
+        for a in sorted(not_found):
+            print(f'    {a}')
     print(f'  Output file     : {output_path.name}')
     print(f'{"═" * 60}')
     print()
