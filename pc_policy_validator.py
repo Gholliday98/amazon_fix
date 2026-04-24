@@ -231,7 +231,16 @@ _HARD_PATTERNS = [
     (re.compile(r'\bpharmaceutical[\s-]grade\b', re.IGNORECASE),
      '', 'unverified pharmaceutical-grade claim'),
 
-    # Certification claims without proof (require substantiation)
+    # Implied quality guarantee / process claims (Amazon 99300 violations)
+    (re.compile(r'\binspected\s+before\s+shipment\b', re.IGNORECASE),
+     'shipped', 'implied inspection guarantee'),
+    (re.compile(r'\btrusted\s+(?:across|by|among|throughout)\b', re.IGNORECASE),
+     'used', 'promotional trust claim'),
+    (re.compile(r'\bmachines?\s+cleanly\b', re.IGNORECASE),
+     'easy to machine', 'unverifiable machining claim'),
+    (re.compile(r'\bships?\s+clean(?:ly)?\b', re.IGNORECASE),
+     '', 'unverifiable condition claim'),
+
     (re.compile(r'\bBPA[\s-]free\b', re.IGNORECASE),
      '', 'unverified BPA-free claim'),
     (re.compile(r'\blead[\s-]free\b', re.IGNORECASE),
