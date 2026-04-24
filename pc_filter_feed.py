@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-pc_filter_feed.py — Extract a subset of rows from the latest feed CSV.
+pc_filter_feed.py — Extract a subset of rows from ALL feed CSVs.
 
-The push script (pc_sp_api_push_v2.py) already runs the policy validator
-on every field before pushing, so just filtering and passing --input is enough.
+Searches every pc_amazon_feed_v4_*.csv (newest first), deduplicates by ASIN,
+and outputs a single push-ready CSV. The push script runs the policy validator
+on every field before pushing, so flagged language is stripped automatically.
 
 Usage:
     python pc_filter_feed.py --material "cutting board"
     python pc_filter_feed.py --asins B0ABC123,B0DEF456,B0GHI789
-    python pc_filter_feed.py --material HDPE --feed my_feed.csv
+    python pc_filter_feed.py --material "cutting board" --asins B0ABC123,...
+    python pc_filter_feed.py --asins B0ABC123,... --feed my_feed.csv
 
 Then push the output:
-    python pc_sp_api_push_v2.py --input pc_filtered_feed_<timestamp>.csv
     python pc_sp_api_push_v2.py --input pc_filtered_feed_<timestamp>.csv --resume
 """
 
@@ -26,34 +27,33 @@ SCRIPT_DIR = Path(__file__).parent
 RUN_ID     = datetime.now().strftime('%Y%m%d_%H%M%S')
 
 
-def find_feed(hint: str = '') -> Path:
+def find_feeds(hint: str = '') -> list[Path]:
     if hint:
         p = Path(hint)
         if not p.is_absolute():
             p = SCRIPT_DIR / p
         if p.exists():
-            return p
+            return [p]
         print(f'[ERROR] Feed file not found: {p}')
         raise SystemExit(1)
 
     matches = glob.glob(str(SCRIPT_DIR / 'pc_amazon_feed_v4_*.csv'))
     if not matches:
-        print('[ERROR] No pc_amazon_feed_v4_*.csv found. Pass --feed <filename>')
+        print('[ERROR] No pc_amazon_feed_v4_*.csv found.')
         raise SystemExit(1)
 
-    chosen = Path(max(matches, key=os.path.getmtime))
-    print(f'  Feed file : {chosen.name}')
-    return chosen
+    # Newest first so we use the most recent content when deduplicating
+    return [Path(p) for p in sorted(matches, key=os.path.getmtime, reverse=True)]
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Filter feed CSV by material keyword or ASIN list.')
+    ap = argparse.ArgumentParser(description='Filter feed CSVs by material keyword or ASIN list.')
     ap.add_argument('--material', metavar='KEYWORD',
                     help='Keyword to match in original_title or new_title (case-insensitive)')
     ap.add_argument('--asins', metavar='ASIN1,ASIN2,...',
                     help='Comma-separated list of ASINs to extract')
     ap.add_argument('--feed', metavar='FILE',
-                    help='Feed CSV to filter (default: most-recent pc_amazon_feed_v4_*.csv)')
+                    help='Specific feed CSV to use (default: searches all pc_amazon_feed_v4_*.csv)')
     ap.add_argument('--output', metavar='FILE',
                     help='Output filename (auto-named if omitted)')
     args = ap.parse_args()
@@ -69,25 +69,28 @@ def main():
         asin_set = {a.strip().upper() for a in args.asins.split(',') if a.strip()}
         print(f'  ASIN filter   : {len(asin_set)} ASINs')
 
-    feed_path = find_feed(args.feed or '')
+    feed_paths = find_feeds(args.feed or '')
+    print(f'  Feed files    : {len(feed_paths)} (searching all)')
 
     output_path = Path(args.output) if args.output else \
         SCRIPT_DIR / f'pc_filtered_feed_{RUN_ID}.csv'
 
-    written  = 0
-    skipped  = 0
-    not_found = asin_set.copy()
+    # Collect rows — deduplicate by ASIN (newest feed wins)
+    seen_asins   = set()
+    matched_rows = []
+    fieldnames   = []
+    not_found    = asin_set.copy()
 
-    with open(feed_path, newline='', encoding='utf-8', errors='replace') as f:
-        reader     = csv.DictReader(f)
-        fieldnames = reader.fieldnames or []
-
-        with open(output_path, 'w', newline='', encoding='utf-8') as out:
-            writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction='ignore')
-            writer.writeheader()
+    for feed_path in feed_paths:
+        with open(feed_path, newline='', encoding='utf-8', errors='replace') as f:
+            reader = csv.DictReader(f)
+            if not fieldnames and reader.fieldnames:
+                fieldnames = reader.fieldnames
 
             for row in reader:
                 row_asin = (row.get('asin') or '').strip().upper()
+                if row_asin in seen_asins:
+                    continue
 
                 title = (
                     (row.get('original_title') or '') + ' ' +
@@ -102,22 +105,25 @@ def main():
                     matched = True
 
                 if matched:
-                    writer.writerow(row)
-                    written += 1
-                else:
-                    skipped += 1
+                    matched_rows.append(row)
+                    seen_asins.add(row_asin)
+
+    with open(output_path, 'w', newline='', encoding='utf-8') as out:
+        writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writeheader()
+        for row in matched_rows:
+            writer.writerow(row)
 
     print(f'\n{"═" * 60}')
-    print(f'  Rows matched  : {written}')
-    print(f'  Rows skipped  : {skipped}')
+    print(f'  Rows matched  : {len(matched_rows)}')
     if not_found:
-        print(f'  ASINs not in feed ({len(not_found)}) — never optimized, skip:')
+        print(f'  ASINs not found in any feed ({len(not_found)}) — need optimizer:')
         for a in sorted(not_found):
             print(f'    {a}')
     print(f'  Output file   : {output_path.name}')
     print(f'{"═" * 60}')
     print()
-    print('  Next step — push the filtered file (--resume skips already-done SKUs):')
+    print('  Next step — push (--resume skips already-done SKUs):')
     print(f'      python pc_sp_api_push_v2.py --input "{output_path.name}" --resume')
     print()
 
