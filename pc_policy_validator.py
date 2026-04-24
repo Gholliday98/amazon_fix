@@ -375,6 +375,24 @@ _SOFT_PATTERNS = [
     (re.compile(r'\bmold[\s-]resistant\b', re.IGNORECASE),
      'easy to clean and maintain', 'mold-resistant claim'),
 
+    # "The only" claims — broadened to catch "the only common/known/true X"
+    (re.compile(r'\bthe\s+only\s+(?:\w+\s+){0,3}(?:plastic|material|product|polymer)\b', re.IGNORECASE),
+     'a', '"the only" unverified claim'),
+
+    # Unverifiable quantitative performance claims
+    (re.compile(r'\bmillions?\s+of\s+times\b', re.IGNORECASE),
+     'repeatedly', 'unverifiable quantitative claim'),
+    (re.compile(r'\bbillions?\s+of\s+(?:times|cycles)\b', re.IGNORECASE),
+     'repeatedly', 'unverifiable quantitative claim'),
+
+    # Freight/shipping policy in description (belongs in seller notes, not content)
+    (re.compile(r'FREIGHT\s+SHIPPING\s+NOTICE.*?(?=\n\n|\Z)', re.IGNORECASE | re.DOTALL),
+     '', 'shipping policy in description'),
+
+    # All-caps section headers in description
+    (re.compile(r'\bCOMMON\s+QUESTIONS\s*:', re.IGNORECASE),
+     'Common Questions:', 'all-caps header'),
+
     # "Proven" as standalone unverified marketing term
     (re.compile(r'\btime[\s-]proven\b', re.IGNORECASE),
      'trusted', '"time-proven" unverified claim'),
