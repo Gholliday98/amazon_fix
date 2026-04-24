@@ -224,11 +224,11 @@ RUFUS_QA = {
         },
         {
             'q': 'How does the clarity of this acrylic compare to glass?',
-            'a': '92% light transmission — actually clearer than standard glass, with significantly better impact resistance. Ideal for display cases, picture frames, sneeze guards, and anywhere optical clarity matters.'
+            'a': '92% light transmission — actually clearer than standard glass, with significantly better impact resistance. Ideal for display cases, picture frames, sneeze guards, and anywhere clarity and light transmission matter.'
         },
         {
             'q': 'What is the difference between cast and extruded acrylic?',
-            'a': 'Cast acrylic offers better optical clarity, tighter thickness tolerances, and superior chemical resistance — ideal for display and precision fabrication. Extruded acrylic is more consistent in thickness and easier to thermoform, making it the preferred choice for forming and bending applications.'
+            'a': 'Cast acrylic offers better visual clarity, tighter thickness tolerances, and superior chemical resistance — ideal for display and precision fabrication. Extruded acrylic is more consistent in thickness and easier to thermoform, making it the preferred choice for forming and bending applications.'
         },
         {
             'q': 'Can acrylic be bonded or glued?',
@@ -254,7 +254,7 @@ RUFUS_QA = {
         },
         {
             'q': 'How does ABS compare to polycarbonate for machine guards?',
-            'a': 'Polycarbonate offers significantly higher impact resistance (250x stronger than glass vs. ABS). ABS is preferred when machinability, paintability, and cost are priorities. PC is the choice when optical clarity and shatter resistance are critical.'
+            'a': 'Polycarbonate offers significantly higher impact resistance (250x stronger than glass vs. ABS). ABS is preferred when machinability, paintability, and cost are priorities. PC is the choice when visual clarity and shatter resistance are critical.'
         },
     ],
     'hdpe': [
@@ -286,7 +286,7 @@ RUFUS_QA = {
         },
         {
             'q': 'Will polycarbonate work for a machine guard or safety shield?',
-            'a': 'Yes — polycarbonate is the industry standard for machine guards, safety shields, and protective barriers precisely because of its combination of optical clarity and near-unbreakable toughness. Rated UL 94 V-2 flame resistant.'
+            'a': 'Yes — polycarbonate is the industry standard for machine guards, safety shields, and protective barriers precisely because of its combination of visual clarity and near-unbreakable toughness. Rated UL 94 V-2 flame resistant.'
         },
         {
             'q': 'Is polycarbonate UV stable for greenhouse or outdoor use?',
@@ -506,7 +506,7 @@ RUFUS_QA = {
         },
         {
             'q': 'How does PETG compare to acrylic?',
-            'a': 'PETG is significantly tougher than acrylic (much higher impact resistance) and less brittle, making it less likely to crack during fabrication or in service. Acrylic offers slightly better optical clarity. PETG is the preferred choice when toughness matters as much as clarity.'
+            'a': 'PETG is significantly tougher than acrylic (much higher impact resistance) and less brittle, making it less likely to crack during fabrication or in service. Acrylic offers slightly better visual clarity. PETG is the preferred choice when toughness matters as much as clarity.'
         },
         {
             'q': 'Is PETG used in food packaging and displays?',
@@ -2455,7 +2455,7 @@ def retry_single_field(field_name, content, row, dims, material_key, material_na
 Product: {new_title}
 Material: {material_name} | Type: {dims.get('product_type')}
 Rules: Under 2000 chars, conversational, answer buyer questions, MUST end with exactly:
-"Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. We are ISO 9001:2015 and AS9100D certified, ensuring rigorous quality management standards across our entire operation. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
+"Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. With over 90 years of experience, we stock and ship from West Nyack, NY. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
 Return ONLY the description text.""",
         'backend_search_terms': f"""Write only Amazon backend search terms.
 Product: {new_title}
@@ -2468,7 +2468,7 @@ Return ONLY the space-separated terms.""",
         '2': 'exact dimensions, tolerances +/-0.010", pack quantity',
         '3': 'applications, industries, specific use cases',
         '4': 'fabrication — tools, cutting, bonding, machining',
-        '5': 'EXACTLY: "PRECISION TOLERANCES & QUALITY — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured under ISO 9001:2015 certified quality management standards for reliable material quality on every order."',
+        '5': 'EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured with rigorous quality standards for reliable material quality on every order."',
     }
     if field_name.startswith('bullet'):
         num = field_name[-1]
