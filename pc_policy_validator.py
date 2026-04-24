@@ -65,6 +65,16 @@ _HARD_PATTERNS = [
     # FDA / EPA / regulatory claims (prohibited without actual registration)
     (re.compile(r'\bFDA[\s-](?:approved|cleared|registered|compliant|certified|listed)\b', re.IGNORECASE),
      '', 'unverified FDA claim'),
+    (re.compile(r'\bcompliant\s+with\s+(?:the\s+)?(?:FDA|EPA|USDA|NSF|OSHA|REACH|RoHS)\b', re.IGNORECASE),
+     '', 'unverified regulatory compliance claim'),
+    (re.compile(r'\bFDA\s+\d+\s+CFR\b', re.IGNORECASE),
+     '', 'unverified FDA CFR reference'),
+    (re.compile(r'\b21\s+CFR\b', re.IGNORECASE),
+     '', 'unverified FDA CFR reference'),
+    (re.compile(r'\bNSF[\s-](?:certified|approved|compliant|listed|rated|standard[s]?)\b', re.IGNORECASE),
+     '', 'unverified NSF claim'),
+    (re.compile(r'\bNSF\s+standard[s]?\b', re.IGNORECASE),
+     '', 'unverified NSF claim'),
     (re.compile(r'\bEPA[\s-](?:approved|registered|certified|compliant)\b', re.IGNORECASE),
      '', 'unverified EPA claim'),
     (re.compile(r'\bUSDA[\s-](?:approved|certified|compliant)\b', re.IGNORECASE),
@@ -75,6 +85,8 @@ _HARD_PATTERNS = [
      '', 'unverified regulatory registration claim'),
     (re.compile(r'\bcertified\s+by\s+(?:the\s+)?(?:FDA|EPA|USDA)\b', re.IGNORECASE),
      '', 'unverified regulatory certification claim'),
+    (re.compile(r'\bdirect\s+food\s+contact\b', re.IGNORECASE),
+     '', 'unverified food-contact claim'),
 
     # Antimicrobial / pesticide claims (requires EPA registration — hard ban)
     (re.compile(r'\bbacteria[\s-]free\b', re.IGNORECASE),
