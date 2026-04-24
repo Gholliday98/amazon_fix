@@ -259,8 +259,8 @@ RUFUS_QA = {
     ],
     'hdpe': [
         {
-            'q': 'Is this HDPE food safe and FDA approved?',
-            'a': 'Yes — compliant with FDA 21 CFR and NSF standards for direct food contact. USDA approved. Safe for cutting boards, food prep surfaces, food processing equipment, and any direct food contact application.'
+            'q': 'Is HDPE used in food processing environments?',
+            'a': 'HDPE is widely used in food processing environments due to its non-porous surface, moisture resistance, and ease of cleaning. Commonly used for cutting boards, food prep surfaces, conveyor components, and food processing equipment.'
         },
         {
             'q': 'Will HDPE warp, absorb odors, or stain?',
@@ -319,8 +319,8 @@ RUFUS_QA = {
             'a': 'Cast nylon offers better crystallinity, higher tensile strength, and improved chemical resistance — preferred for large structural and wear parts. Extruded nylon provides tighter dimensional tolerances and more consistent properties for precision machined components.'
         },
         {
-            'q': 'Is nylon food safe?',
-            'a': 'FDA-compliant grades of nylon are available and widely used in food processing equipment, conveyor components, and food contact applications. Confirm the specific grade\'s FDA compliance for your application before use.'
+            'q': 'Is nylon used in food processing equipment?',
+            'a': 'Nylon is widely used in food processing equipment, conveyor components, and industrial machinery. Its low moisture absorption, self-lubricating properties, and machinability make it a popular choice for precision food processing components.'
         },
     ],
     'uhmw': [
@@ -329,8 +329,8 @@ RUFUS_QA = {
             'a': 'UHMW has the highest abrasion resistance of any thermoplastic and no break impact strength — designed to outlast steel in many wear applications. Conveyor liners, wear strips, and chute liners made from UHMW regularly last years in demanding industrial environments.'
         },
         {
-            'q': 'Is UHMW food safe for conveyor and food processing applications?',
-            'a': 'Yes — FDA 21 CFR, NSF, and USDA approved. Widely used in food processing conveyor systems, star wheels, guide rails, and food contact wear components. Non-porous surface resists bacterial growth.'
+            'q': 'Is UHMW used in food processing applications?',
+            'a': 'UHMW is widely used in food processing conveyor systems, star wheels, guide rails, and wear components. Its non-porous surface is easy to clean and maintain, making it a common choice for food processing equipment fabrication.'
         },
         {
             'q': 'Can UHMW be bonded or welded?',
@@ -369,8 +369,8 @@ RUFUS_QA = {
     ],
     'polypropylene': [
         {
-            'q': 'Is polypropylene food safe?',
-            'a': 'Yes — FDA 21 CFR and NSF compliant. Polypropylene is one of the most widely used food-safe plastics for food processing equipment, containers, and food contact surfaces. Resists most cleaning chemicals and sanitizers.'
+            'q': 'Is polypropylene used in food processing equipment?',
+            'a': 'Polypropylene is widely used in food processing equipment, containers, and industrial applications. It resists moisture, most cleaning chemicals, and has a non-porous surface that is easy to clean — making it a common material choice for food processing fabrication.'
         },
         {
             'q': 'What makes polypropylene unique compared to other plastics?',
@@ -386,7 +386,7 @@ RUFUS_QA = {
         },
         {
             'q': 'What is the temperature limit for polypropylene?',
-            'a': 'Polypropylene handles continuous service from -20°F to 200°F — higher than HDPE and suitable for hot-fill food applications and steam sterilization at moderate temperatures.'
+            'a': 'Polypropylene handles continuous service from -20°F to 200°F — higher than HDPE and suitable for hot-fill applications and high-temperature industrial environments.'
         },
     ],
     'peek': [
@@ -395,8 +395,8 @@ RUFUS_QA = {
             'a': 'Yes — PEEK maintains structural integrity at continuous service temperatures up to 480°F (250°C), with a heat deflection temperature of 600°F. One of the highest performance thermoplastics available for demanding high-temperature applications.'
         },
         {
-            'q': 'Is PEEK biocompatible for medical device applications?',
-            'a': 'Yes — PEEK is USP Class VI and FDA compliant, making it widely used in medical devices, surgical instruments, and implantable components. Its biocompatibility and radiolucency make it the preferred polymer for medical and dental applications.'
+            'q': 'Is PEEK used in medical device applications?',
+            'a': 'PEEK is widely used in medical device manufacturing due to its high strength, chemical resistance, and ability to withstand repeated high-temperature processing. Its radiolucency and dimensional stability make it a preferred engineering polymer for precision medical and dental components.'
         },
         {
             'q': 'Can PEEK replace metal in my application?',
@@ -426,7 +426,7 @@ RUFUS_QA = {
         },
         {
             'q': 'Can Delrin be used in food processing applications?',
-            'a': 'FDA-compliant grades of Delrin are available and widely used in food processing equipment, conveyor components, and food contact applications. Confirm the specific grade\'s FDA compliance for your application.'
+            'a': 'Delrin is widely used in food processing equipment, conveyor components, and precision machinery parts. Its low friction, high stiffness, and moisture resistance make it a preferred choice for gears, bearings, and wear components in demanding industrial environments.'
         },
         {
             'q': 'What is Delrin used for?',
@@ -469,8 +469,8 @@ RUFUS_QA = {
             'a': 'Yes — polyethylene welds well with hot gas and extrusion welding. Machines cleanly with standard tools. Does not bond reliably with solvent cement — use mechanical fasteners or welding for assemblies.'
         },
         {
-            'q': 'Is polyethylene food safe?',
-            'a': 'FDA-compliant grades of polyethylene are widely used in food processing, packaging, and food contact applications. Verify the specific grade meets FDA 21 CFR requirements for your application.'
+            'q': 'Is polyethylene used in food processing and packaging?',
+            'a': 'Polyethylene is one of the most widely used plastics in food processing and packaging environments. Its non-porous surface, moisture resistance, and chemical resistance make it a practical choice for food processing equipment components and industrial containers.'
         },
         {
             'q': 'How does polyethylene compare to HDPE?',
@@ -509,8 +509,8 @@ RUFUS_QA = {
             'a': 'PETG is significantly tougher than acrylic (much higher impact resistance) and less brittle, making it less likely to crack during fabrication or in service. Acrylic offers slightly better optical clarity. PETG is the preferred choice when toughness matters as much as clarity.'
         },
         {
-            'q': 'Is PETG food safe?',
-            'a': 'Yes — PETG is FDA compliant for food contact applications. Widely used in food packaging, beverage containers, and food service displays.'
+            'q': 'Is PETG used in food packaging and displays?',
+            'a': 'PETG is widely used in food packaging, beverage containers, and point-of-sale displays. Its excellent clarity, impact resistance, and ease of thermoforming make it a popular choice for packaging and display fabrication.'
         },
         {
             'q': 'Can PETG be cut and fabricated?',
@@ -539,8 +539,8 @@ RUFUS_QA = {
             'a': 'Polystyrene is brittle compared to acrylic or polycarbonate and not suitable for impact-demanding applications. It has limited chemical resistance and can craze or crack with exposure to certain solvents. Best suited for light-duty indoor applications.'
         },
         {
-            'q': 'Is polystyrene food safe?',
-            'a': 'FDA-compliant grades of polystyrene are used in food packaging and food service applications. However, polystyrene is not recommended for hot food contact or microwave use in most applications.'
+            'q': 'Is polystyrene used in food packaging applications?',
+            'a': 'Polystyrene is commonly used in food packaging and food service disposables. It is not recommended for hot food or microwave applications due to its lower heat resistance compared to other engineering plastics.'
         },
     ],
     'polyurethane': [
@@ -598,7 +598,7 @@ RUFUS_QA = {
         },
         {
             'q': 'Is Ultem used in medical devices?',
-            'a': 'Yes — Ultem is USP Class VI compliant and withstands steam autoclave sterilization, making it widely used in medical instruments, surgical trays, and reusable medical device components that require repeated sterilization cycles.'
+            'a': 'Ultem is widely used in medical device manufacturing due to its high heat resistance, chemical resistance, and ability to withstand repeated high-temperature processing cycles. Commonly used for surgical trays, instrument handles, and precision medical components requiring dimensional stability.'
         },
         {
             'q': 'Can Ultem be machined?',
@@ -962,7 +962,7 @@ MATERIAL_DATA = {
         'key_stat': 'FDA and NSF compliant — safe for direct food contact',
         'compliance': ['FDA 21 CFR', 'NSF Compliant', 'ASTM D4976', 'USDA Approved'],
         'pain_points': [
-            'Is this actually food safe and NSF compliant?',
+            'Will this work for food processing equipment fabrication?',
             'Will this warp, absorb odors, or stain?',
             'Can I use this in outdoor or marine environments?',
         ],
@@ -1021,7 +1021,7 @@ MATERIAL_DATA = {
         'compliance': ['FDA 21 CFR', 'NSF Compliant', 'USDA Approved', 'ASTM D4020'],
         'pain_points': [
             'How long will this last in my high-wear application?',
-            'Is this food safe for my conveyor or food processing line?',
+            'Will this work for conveyor and food processing equipment?',
             'Can I weld or bond UHMW to other surfaces?',
         ],
         'intended_use_by_shape': {
@@ -1058,7 +1058,7 @@ MATERIAL_DATA = {
         'key_stat': 'Unique living hinge capability — flexes millions of times without fatigue',
         'compliance': ['FDA 21 CFR', 'NSF Compliant', 'ASTM D4101'],
         'pain_points': [
-            'Is this food safe and FDA compliant?',
+            'Will this work for food processing equipment fabrication?',
             'Can this be used for living hinges?',
             'How chemical resistant is polypropylene?',
         ],
@@ -1076,7 +1076,7 @@ MATERIAL_DATA = {
         'compliance': ['ASTM D6262', 'USP Class VI', 'FDA Compliant', 'RoHS Compliant'],
         'pain_points': [
             'Will this hold up at continuous high temperatures?',
-            'Is this biocompatible for my medical device application?',
+            'Will this work for medical device component manufacturing?',
             'Can PEEK replace metal in my application?',
         ],
         'intended_use_by_shape': {
@@ -2216,11 +2216,10 @@ CAPS_PATTERN = re.compile(r'^[A-Z][A-Z\s&/+\-,]{2,}—')
 
 CERTIFICATION_PARAGRAPH = (
     'Plastic-Craft Products has been a trusted supplier of quality plastic '
-    'materials since 1934. We are ISO 9001:2015 and AS9100D certified, ensuring '
-    'rigorous quality management standards across our entire operation. All '
-    'dimensions are held to +/- 0.010" tolerances. Whether you\'re a hobbyist, '
-    'fabricator, engineer, or procurement professional — we have the materials '
-    'and expertise to support your project.'
+    'materials since 1934. With over 90 years of experience, we stock and ship '
+    'from West Nyack, NY. All dimensions are held to +/- 0.010" tolerances. '
+    'Whether you\'re a hobbyist, fabricator, engineer, or procurement '
+    'professional — we have the materials and expertise to support your project.'
 )
 
 def validate_input(dims, material_key, title):
@@ -2341,16 +2340,23 @@ client = None  # placeholder, set in process_listings()
 
 def build_system_prompt():
     return """You are an expert Amazon listing copywriter for Plastic-Craft Products,
-founded 1934, ISO 9001:2015 and AS9100D certified, West Nyack NY.
+founded 1934, West Nyack NY.
+
+CRITICAL — NEVER include any of the following (Amazon policy violations):
+- Regulatory or certification claims: FDA, NSF, USDA, EPA, ASTM, RoHS, ISO, CE, UL, REACH
+- Food safety claims: food-safe, food-grade, food contact, direct food contact
+- Medical claims: medical-grade, hospital-grade, biocompatible, USP Class VI
+- Guarantee language: guaranteed, guarantee, warranty claims
+- BPA-free, lead-free, non-toxic, chemical-free claims
 
 TITLE: Already provided — use as-is, do not regenerate.
 
 BULLETS — EVERY bullet MUST start with a Title Case benefit phrase + em dash (—):
-- B1: Material properties with specific data (PSI, temp ratings, compliance)
+- B1: Material properties with specific data (PSI, temp ratings, physical properties)
 - B2: Exact specs — dimensions, tolerances +/-0.010", pack quantity
 - B3: Applications — specific industries, projects, use cases (use provided intended_use)
 - B4: Fabrication — tools, bonding, forming, machining methods
-- B5: EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured under ISO 9001:2015 certified quality management standards for reliable material quality on every order."
+- B5: EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured with rigorous quality standards for reliable material quality on every order."
 - Each bullet under 500 characters
 - Feature + Benefit + Proof with numbers and data
 - Answer real buyer pain points
@@ -2359,13 +2365,12 @@ BULLETS — EVERY bullet MUST start with a Title Case benefit phrase + em dash (
 DESCRIPTION:
 - START with the RUFUS Q&A BLOCK provided — format as Q: / A: pairs
 - Follow with conversational copy answering real buyer questions
-- Include material data points (tensile strength, temp ratings, compliance)
+- Include material data points (tensile strength, temp ratings, physical properties)
 - Address buyer pain points for this specific material and shape
-- Include compliance (FDA, NSF, ASTM, RoHS where applicable)
 - Include recommended uses provided
 - Include "Stocked and ships from West Nyack, NY"
 - Include Utility Grade/Nominal if in original title
-- MUST end EXACTLY: "Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. We are ISO 9001:2015 and AS9100D certified, ensuring rigorous quality management standards across our entire operation. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
+- MUST end EXACTLY: "Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. With over 90 years of experience, we have the materials and expertise to support your project. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we stock and ship from West Nyack, NY."
 - Under 2000 characters total including Q&A block
 
 BACKEND TERMS:
@@ -2408,7 +2413,6 @@ Weight: {weight} lbs | Box: {json.dumps(box_dims)}
 Key stat: {mat_data.get('key_stat','N/A')}
 Tensile strength: {mat_data.get('tensile_psi','N/A')} PSI
 Service temp: {mat_data.get('service_temp','N/A')}
-Compliance: {', '.join(mat_data.get('compliance',[]))}
 Pain points: {' | '.join(mat_data.get('pain_points',[]))}
 Intended use for this shape: {intended_use}
 Recommended uses: {rec_uses}
