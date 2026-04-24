@@ -345,14 +345,6 @@ def _learn_from_warnings(product_type: str, warn_issues: list) -> None:
         _dynamic_skip.setdefault(product_type, set()).add(attr)
 
 
-def filter_patches(patches: list, product_type: str) -> list:
-    skip = set(_SKIP_ATTRS_BY_TYPE.get(product_type, set()))
-    skip |= _dynamic_skip.get(product_type, set())
-    if not skip:
-        return patches
-    return [p for p in patches if p['path'].split('/')[-1] not in skip]
-
-
 def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
