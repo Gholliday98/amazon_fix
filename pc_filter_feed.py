@@ -7,11 +7,12 @@ on every field before pushing, so just filtering and passing --input is enough.
 
 Usage:
     python pc_filter_feed.py --material "cutting board"
-    python pc_filter_feed.py --material HDPE
-    python pc_filter_feed.py --material "cutting board" --feed my_feed.csv
+    python pc_filter_feed.py --asins B0ABC123,B0DEF456,B0GHI789
+    python pc_filter_feed.py --material HDPE --feed my_feed.csv
 
 Then push the output:
     python pc_sp_api_push_v2.py --input pc_filtered_feed_<timestamp>.csv
+    python pc_sp_api_push_v2.py --input pc_filtered_feed_<timestamp>.csv --resume
 """
 
 import argparse
@@ -46,16 +47,27 @@ def find_feed(hint: str = '') -> Path:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Filter feed CSV by material keyword.')
-    ap.add_argument('--material', metavar='KEYWORD', required=True,
+    ap = argparse.ArgumentParser(description='Filter feed CSV by material keyword or ASIN list.')
+    ap.add_argument('--material', metavar='KEYWORD',
                     help='Keyword to match in original_title or new_title (case-insensitive)')
+    ap.add_argument('--asins', metavar='ASIN1,ASIN2,...',
+                    help='Comma-separated list of ASINs to extract')
     ap.add_argument('--feed', metavar='FILE',
                     help='Feed CSV to filter (default: most-recent pc_amazon_feed_v4_*.csv)')
     ap.add_argument('--output', metavar='FILE',
                     help='Output filename (auto-named if omitted)')
     args = ap.parse_args()
 
-    kw = args.material.lower()
+    if not args.material and not args.asins:
+        print('[ERROR] Specify --material and/or --asins')
+        raise SystemExit(1)
+
+    kw = args.material.lower() if args.material else None
+
+    asin_set = set()
+    if args.asins:
+        asin_set = {a.strip().upper() for a in args.asins.split(',') if a.strip()}
+        print(f'  ASIN filter   : {len(asin_set)} ASINs')
 
     feed_path = find_feed(args.feed or '')
 
@@ -64,6 +76,7 @@ def main():
 
     written  = 0
     skipped  = 0
+    not_found = asin_set.copy()
 
     with open(feed_path, newline='', encoding='utf-8', errors='replace') as f:
         reader     = csv.DictReader(f)
@@ -74,12 +87,21 @@ def main():
             writer.writeheader()
 
             for row in reader:
+                row_asin = (row.get('asin') or '').strip().upper()
+
                 title = (
                     (row.get('original_title') or '') + ' ' +
                     (row.get('new_title') or '')
                 ).lower()
 
-                if kw in title:
+                matched = False
+                if asin_set and row_asin in asin_set:
+                    matched = True
+                    not_found.discard(row_asin)
+                if kw and kw in title:
+                    matched = True
+
+                if matched:
                     writer.writerow(row)
                     written += 1
                 else:
@@ -88,11 +110,15 @@ def main():
     print(f'\n{"═" * 60}')
     print(f'  Rows matched  : {written}')
     print(f'  Rows skipped  : {skipped}')
+    if not_found:
+        print(f'  ASINs not in feed ({len(not_found)}) — never optimized, skip:')
+        for a in sorted(not_found):
+            print(f'    {a}')
     print(f'  Output file   : {output_path.name}')
     print(f'{"═" * 60}')
     print()
-    print('  Next step — push the filtered file:')
-    print(f'      python pc_sp_api_push_v2.py --input "{output_path.name}"')
+    print('  Next step — push the filtered file (--resume skips already-done SKUs):')
+    print(f'      python pc_sp_api_push_v2.py --input "{output_path.name}" --resume')
     print()
 
 
