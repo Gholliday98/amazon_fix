@@ -2317,9 +2317,18 @@ def auto_correct(content, issues, freight_needed):
                 cert_text = desc[cert_idx:]
                 body = desc[:cert_idx].strip()
                 available = LIMITS['description'] - len(cert_text) - 4
-                corrected['description'] = body[:available].strip() + '\n\n' + cert_text
+                trimmed = body[:available]
+                # cut at last sentence boundary to avoid mid-sentence truncation
+                last_sent = max(trimmed.rfind('. '), trimmed.rfind('.\n'), trimmed.rfind('? '), trimmed.rfind('! '))
+                if last_sent > available // 2:
+                    trimmed = trimmed[:last_sent + 1]
+                corrected['description'] = trimmed.strip() + '\n\n' + cert_text
             else:
-                corrected['description'] = desc[:LIMITS['description']].strip()
+                trimmed = desc[:LIMITS['description']]
+                last_sent = max(trimmed.rfind('. '), trimmed.rfind('.\n'), trimmed.rfind('? '), trimmed.rfind('! '))
+                if last_sent > LIMITS['description'] // 2:
+                    trimmed = trimmed[:last_sent + 1]
+                corrected['description'] = trimmed.strip()
             fixes.append('DESCRIPTION_TRIMMED')
 
         elif re.match(r'BULLET(\d)_TOO_LONG', issue):
