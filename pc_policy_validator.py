@@ -307,7 +307,7 @@ _SOFT_PATTERNS = [
     (re.compile(r'#\s*1\b(?!\s*\w)', re.IGNORECASE),
      'top-rated', '#1 claim'),
     (re.compile(r'\bnumber\s+one\b', re.IGNORECASE),
-     'a trusted choice', 'number one claim'),
+     'a leading choice', 'number one claim'),
 
     # "Best X available / on the market" — replace with factual framing
     (re.compile(r'\bthe\s+best\s+\w+(?:\s+\w+)?\s+(?:available|on\s+the\s+market)\b', re.IGNORECASE),
@@ -414,10 +414,6 @@ _SOFT_PATTERNS = [
      'established', '"time-proven" unverified claim'),
     (re.compile(r'\btried[\s-]and[\s-](?:true|proven|tested)\b', re.IGNORECASE),
      'established', '"tried-and-proven" unverified claim'),
-
-    # "Trusted" as unverified marketing claim
-    (re.compile(r'\btrusted\b', re.IGNORECASE),
-     'used', 'unverified trust claim'),
 
     # "Ultimate" as superlative
     (re.compile(r'\bthe\s+ultimate\s+(?:\w+\s+){0,3}(?:solution|choice|option|material|plastic)\b', re.IGNORECASE),
