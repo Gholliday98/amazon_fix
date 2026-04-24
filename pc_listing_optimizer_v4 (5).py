@@ -414,7 +414,7 @@ RUFUS_QA = {
     'delrin': [
         {
             'q': 'Will Delrin hold tight tolerances after machining?',
-            'a': 'Yes — Delrin (acetal/POM) has less than 0.2% moisture absorption, delivering exceptional dimensional stability before and after machining. Holds tolerances tighter than nylon in humid environments, making it the preferred choice for precision gears, cams, and mechanical components.'
+            'a': 'Yes — Delrin (acetal/POM) has less than 0.2% moisture absorption, delivering high dimensional stability before and after machining. Holds tolerances tighter than nylon in humid environments, making it the preferred choice for precision gears, cams, and mechanical components.'
         },
         {
             'q': 'How does Delrin compare to nylon for gears?',
@@ -480,7 +480,7 @@ RUFUS_QA = {
     'noryl': [
         {
             'q': 'What is Noryl plastic and what is it used for?',
-            'a': 'Noryl (modified PPO/PPE) is an engineering thermoplastic known for its exceptional dimensional stability, low moisture absorption, and excellent electrical insulating properties. Used in electrical housings, automotive components, and medical devices.'
+            'a': 'Noryl (modified PPO/PPE) is an engineering thermoplastic known for its high dimensional stability, low moisture absorption (under 0.1%), and strong electrical insulating properties. Used in electrical housings, automotive components, and medical devices.'
         },
         {
             'q': 'Does Noryl absorb moisture or change dimensions?',
@@ -2252,7 +2252,7 @@ def validate_output(content, freight_needed):
     if not desc: issues.append('DESCRIPTION_MISSING')
     elif len(desc) > LIMITS['description']: issues.append(f'DESCRIPTION_TOO_LONG:{len(desc)}')
     if desc and CERTIFICATION_CLOSING not in desc: issues.append('DESCRIPTION_MISSING_CERTIFICATION')
-    if freight_needed and FREIGHT_BLURB[:30] not in desc: issues.append('FREIGHT_NOTICE_MISSING')
+    # freight notice intentionally excluded from descriptions
     backend = content.get('backend_search_terms', '')
     if not backend: issues.append('BACKEND_MISSING')
     elif len(backend.encode('utf-8')) > LIMITS['backend_search_terms']:
@@ -2285,14 +2285,12 @@ def auto_correct(content, issues, freight_needed):
             # before appending either, to prevent exceeding 2000 chars
             desc = corrected.get('description', '')
             cert_needed = CERTIFICATION_CLOSING not in desc
-            freight_needed_flag = freight_needed and FREIGHT_BLURB[:30] not in desc
+            freight_needed_flag = False  # freight notice removed from descriptions — triggers Amazon flags
 
             # Calculate what we need to append
             append_parts = []
             if cert_needed:
                 append_parts.append(CERTIFICATION_PARAGRAPH)
-            if freight_needed_flag:
-                append_parts.append(FREIGHT_BLURB)
 
             if not append_parts:
                 continue
@@ -2357,29 +2355,35 @@ CRITICAL — NEVER include any of the following (Amazon policy violations):
 - Medical claims: medical-grade, hospital-grade, biocompatible, USP Class VI
 - Guarantee language: guaranteed, guarantee, warranty claims
 - BPA-free, lead-free, non-toxic, chemical-free claims
+- Freight or shipping policy information
+- Superlatives or unverifiable claims: best, greatest, highest, most advanced, leading, superior, excellent, ideal, perfect, exceptional, outstanding, remarkable, significant, significantly, premium, ultimate, revolutionary, world-class, state-of-the-art, cutting-edge, innovative, proven, trusted
+- "The only", "unlike any other", "one of a kind"
+- "Inspected before shipment", "quality checked", "hand selected"
+- Millions/billions of times, limitless, infinite cycles
+
+ONLY use facts that can be verified: dimensions, PSI values, temperature ranges, weight, chemical names, years in business, city of operation.
 
 TITLE: Already provided — use as-is, do not regenerate.
 
 BULLETS — EVERY bullet MUST start with a Title Case benefit phrase + em dash (—):
-- B1: Material properties with specific data (PSI, temp ratings, physical properties)
+- B1: Material properties with specific verified data (PSI, temp ratings, chemical resistance)
 - B2: Exact specs — dimensions, tolerances +/-0.010", pack quantity
 - B3: Applications — specific industries, projects, use cases (use provided intended_use)
-- B4: Fabrication — tools, bonding, forming, machining methods
+- B4: Fabrication — tools, cutting, bonding, forming, machining methods
 - B5: EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured with rigorous quality standards for reliable material quality on every order."
 - Each bullet under 500 characters
-- Feature + Benefit + Proof with numbers and data
-- Answer real buyer pain points
+- Every claim must be a verifiable fact — no marketing language
 - NEVER use all-caps words (Amazon listing violation)
 
 DESCRIPTION:
 - START with the RUFUS Q&A BLOCK provided — format as Q: / A: pairs
-- Follow with conversational copy answering real buyer questions
-- Include material data points (tensile strength, temp ratings, physical properties)
-- Address buyer pain points for this specific material and shape
+- Follow with factual copy covering material properties, dimensions, and applications
+- Include verified material data (tensile strength, temp ratings, chemical resistance)
 - Include recommended uses provided
 - Include "Stocked and ships from West Nyack, NY"
 - Include Utility Grade/Nominal if in original title
-- MUST end EXACTLY: "Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. With over 90 years of experience, we have the materials and expertise to support your project. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we stock and ship from West Nyack, NY."
+- NO shipping or freight information
+- MUST end EXACTLY: "Plastic-Craft Products has been a supplier of plastic materials since 1934. With over 90 years of experience, we stock and ship from West Nyack, NY. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
 - Under 2000 characters total including Q&A block
 
 BACKEND TERMS:
@@ -2430,7 +2434,7 @@ Base backend terms: {' '.join(base_backend[:12])}
 Spanish backend terms to include: {spanish}
 RUFUS Q&A BLOCK — include this at the START of the description before main copy:
 {rufus_qa}
-{'IMPORTANT: End description with freight notice: ' + FREIGHT_BLURB if freight_needed else ''}"""
+"""
 
     try:
         response = client.messages.create(

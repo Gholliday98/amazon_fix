@@ -311,13 +311,13 @@ _SOFT_PATTERNS = [
 
     # "Best X available / on the market" — replace with factual framing
     (re.compile(r'\bthe\s+best\s+\w+(?:\s+\w+)?\s+(?:available|on\s+the\s+market)\b', re.IGNORECASE),
-     'an excellent choice', '"best available" superlative'),
+     'a strong choice', '"best available" superlative'),
     (re.compile(r'\bbest(?:-in-class|-in-industry)?\b', re.IGNORECASE),
      'high-performance', '"best" superlative'),
 
     # "The clearest / strongest / toughest plastic available"
     (re.compile(r'\bthe\s+(?:clearest|strongest|toughest|hardest|most\s+\w+)\s+plastic\s+available\b', re.IGNORECASE),
-     'an exceptionally high-performing plastic', 'unverified superlative'),
+     'a high-performing plastic', 'unverified superlative'),
 
     # "Highest quality" without data
     (re.compile(r'\bhighest[\s-]quality\b', re.IGNORECASE),
@@ -331,7 +331,23 @@ _SOFT_PATTERNS = [
 
     # "Unmatched" / "unrivaled" / "unsurpassed"
     (re.compile(r'\b(?:unmatched|unrivaled|unsurpassed|unbeatable)\b', re.IGNORECASE),
-     'exceptional', 'unverified superlative'),
+     'high-performance', 'unverified superlative'),
+
+    # "Significant" / "significantly" — vague intensifier without data
+    (re.compile(r'\bsignificant(?:ly)?\b', re.IGNORECASE),
+     '', 'vague intensifier'),
+
+    # "Exceptional" — superlative without data
+    (re.compile(r'\bexceptional(?:ly)?\b', re.IGNORECASE),
+     'high', 'unverified superlative'),
+
+    # "Outstanding" — superlative without data
+    (re.compile(r'\boutstanding\b', re.IGNORECASE),
+     'strong', 'unverified superlative'),
+
+    # "Remarkable" — superlative without data
+    (re.compile(r'\bremarkable(?:ly)?\b', re.IGNORECASE),
+     '', 'unverified superlative'),
 
     # "The only plastic that..."
     (re.compile(r'\bthe\s+only\s+(?:plastic|material|product)\s+that\b', re.IGNORECASE),
@@ -345,7 +361,7 @@ _SOFT_PATTERNS = [
     (re.compile(r'\bsuperior\s+(?:quality|performance|strength|durability|clarity|product|material|plastic)\b', re.IGNORECASE),
      'high-quality', '"superior" superlative'),
     (re.compile(r'\bof\s+superior\s+quality\b', re.IGNORECASE),
-     'of exceptional quality', '"superior quality" superlative'),
+     'of high quality', '"superior quality" superlative'),
 
     # "Top quality" / "top-tier"
     (re.compile(r'\btop[\s-](?:quality|tier|grade|notch)\b', re.IGNORECASE),
@@ -395,13 +411,25 @@ _SOFT_PATTERNS = [
 
     # "Proven" as standalone unverified marketing term
     (re.compile(r'\btime[\s-]proven\b', re.IGNORECASE),
-     'trusted', '"time-proven" unverified claim'),
+     'established', '"time-proven" unverified claim'),
     (re.compile(r'\btried[\s-]and[\s-](?:true|proven|tested)\b', re.IGNORECASE),
-     'trusted', '"tried-and-proven" unverified claim'),
+     'established', '"tried-and-proven" unverified claim'),
+
+    # "Trusted" as unverified marketing claim
+    (re.compile(r'\btrusted\b', re.IGNORECASE),
+     'used', 'unverified trust claim'),
 
     # "Ultimate" as superlative
     (re.compile(r'\bthe\s+ultimate\s+(?:\w+\s+){0,3}(?:solution|choice|option|material|plastic)\b', re.IGNORECASE),
-     'an excellent choice', '"ultimate" superlative'),
+     'a solid choice', '"ultimate" superlative'),
+
+    # "Ideal" as unverifiable superlative
+    (re.compile(r'\bideal\s+for\b', re.IGNORECASE),
+     'suitable for', '"ideal for" superlative'),
+
+    # "Excellent" as unverifiable superlative
+    (re.compile(r'\bexcellent\b', re.IGNORECASE),
+     'strong', '"excellent" superlative'),
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
