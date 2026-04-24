@@ -26,7 +26,7 @@ RUN_ID     = datetime.now().strftime('%Y%m%d_%H%M%S')
 
 
 def load_error_asins() -> dict:
-    """Return {asin: error_code} for every errored ASIN across all push results."""
+    """Return {asin: error_code} for every ASIN that has ever errored."""
     files = sorted(
         glob.glob(str(SCRIPT_DIR / 'pc_push_v2_results_*.csv')) +
         glob.glob(str(SCRIPT_DIR / 'pc_push_results_*.csv')),
@@ -39,8 +39,7 @@ def load_error_asins() -> dict:
 
     print(f'  Reading {len(files)} push result file(s)...')
 
-    error_asins  = {}
-    success_asins = set()
+    error_asins = {}
 
     for fpath in files:
         with open(fpath, newline='', encoding='utf-8', errors='replace') as f:
@@ -50,14 +49,8 @@ def load_error_asins() -> dict:
                 code   = (row.get('error_code') or '').strip()
                 if not asin:
                     continue
-                if status == 'success':
-                    success_asins.add(asin)
-                elif status == 'error' and asin not in success_asins:
+                if status == 'error' and asin not in error_asins:
                     error_asins[asin] = code
-
-    # Remove any that have since succeeded in a later run
-    for asin in success_asins:
-        error_asins.pop(asin, None)
 
     return error_asins
 
