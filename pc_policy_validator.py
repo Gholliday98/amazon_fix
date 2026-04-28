@@ -297,6 +297,12 @@ _HARD_PATTERNS = [
     # Comparison to banned competitor brand names in promotional context
     (re.compile(r'\b(?:better|stronger|clearer|superior)\s+than\s+(?:plexiglas|lucite|lexan)\b', re.IGNORECASE),
      '', 'competitor disparagement'),
+
+    # Restricted / hazardous chemicals
+    (re.compile(r'\bmethylene[\s-]chloride\b', re.IGNORECASE),
+     '', 'restricted chemical (methylene chloride)'),
+    (re.compile(r'\bdichloromethane\b', re.IGNORECASE),
+     '', 'restricted chemical (dichloromethane / methylene chloride)'),
 ]
 
 # ── Soft prohibited patterns ───────────────────────────────────────────────────
