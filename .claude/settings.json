@@ -1,0 +1,9 @@
+{
+  "plugins": [
+    {
+      "name": "watch",
+      "source": "~/.codex/skills/watch",
+      "description": "Let Claude watch a video. Downloads with yt-dlp, extracts frames with ffmpeg, pulls captions or falls back to Whisper."
+    }
+  ]
+}
