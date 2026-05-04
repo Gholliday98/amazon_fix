@@ -234,12 +234,46 @@ _HARD_PATTERNS = [
     # Implied quality guarantee / process claims (Amazon 99300 violations)
     (re.compile(r'\binspected\s+before\s+shipment\b', re.IGNORECASE),
      'shipped', 'implied inspection guarantee'),
-    (re.compile(r'\btrusted\s+(?:across|by|among|throughout)\b', re.IGNORECASE),
-     'used', 'promotional trust claim'),
+    (re.compile(r'\btrusted\s+(?:across|by|among|throughout|supplier|partner|source|brand|name)\b', re.IGNORECASE),
+     'established', 'promotional trust claim'),
     (re.compile(r'\bmachines?\s+cleanly\b', re.IGNORECASE),
      'easy to machine', 'unverifiable machining claim'),
+    (re.compile(r'\bcuts?\s+cleanly\b', re.IGNORECASE),
+     'easy to cut', 'unverifiable condition claim'),
     (re.compile(r'\bships?\s+clean(?:ly)?\b', re.IGNORECASE),
      '', 'unverifiable condition claim'),
+
+    # Food service context — implies food-grade/food-safe without certification
+    (re.compile(r'\bfood[\s-]service\s+(?:operations?|equipment|applications?|environments?|use|industry)\b', re.IGNORECASE),
+     'commercial operations', 'implicit food-grade claim'),
+    (re.compile(r'\bfood[\s-]service\b', re.IGNORECASE),
+     'commercial', 'implicit food-grade claim'),
+    (re.compile(r'\bfood[\s-]prep\s+(?:environments?|stations?|areas?|surfaces?|applications?)\b', re.IGNORECASE),
+     'prep environments', 'implicit food-grade claim'),
+    (re.compile(r'\binstitutional\s+food\s+prep\b', re.IGNORECASE),
+     'commercial prep', 'implicit food-grade claim'),
+    (re.compile(r'\bbutcher\s+(?:counters?|shops?|blocks?|stations?)\b', re.IGNORECASE),
+     'work surfaces', 'implicit food-grade claim'),
+    (re.compile(r'\brestaurant\s+kitchen[s]?\b', re.IGNORECASE),
+     'commercial kitchens', 'implicit food-grade claim'),
+    (re.compile(r'\bcatering\s+(?:facilities|operations?|environments?|applications?)\b', re.IGNORECASE),
+     'commercial facilities', 'implicit food-grade claim'),
+    (re.compile(r'\bfood\s+(?:processing|production)\s+(?:facilities|environments?|applications?)\b', re.IGNORECASE),
+     'industrial facilities', 'implicit food-grade claim'),
+    (re.compile(r'\bfood\s+safety\s+standards?\b', re.IGNORECASE),
+     'industry standards', 'implicit food-safe claim'),
+    (re.compile(r'\bstrictest\s+food\b', re.IGNORECASE),
+     'industry', 'implicit food-safe claim'),
+
+    # Certification claims without verification
+    (re.compile(r'\bAS9100[A-Z]?\b', re.IGNORECASE),
+     '', 'unverified AS9100 certification claim'),
+
+    # Logistics / shipping info in listing content
+    (re.compile(r'\bstocked\s+and\s+ships?\s+from\s+[\w\s,]+(?:\.|$)', re.IGNORECASE),
+     '', 'shipping info in listing content'),
+    (re.compile(r'\bships?\s+from\s+[\w\s,]+(?:\.|$)', re.IGNORECASE),
+     '', 'shipping info in listing content'),
 
     (re.compile(r'\bBPA[\s-]free\b', re.IGNORECASE),
      '', 'unverified BPA-free claim'),
@@ -432,6 +466,89 @@ _SOFT_PATTERNS = [
     # "Excellent" as unverifiable superlative
     (re.compile(r'\bexcellent\b', re.IGNORECASE),
      'strong', '"excellent" superlative'),
+
+    # "Premium" — very commonly flagged by Amazon
+    # Catch "premium quality" first to avoid "quality quality" double
+    (re.compile(r'\bpremium[\s-]quality\b', re.IGNORECASE),
+     'high quality', '"premium quality" superlative'),
+    (re.compile(r'\bpremium\b', re.IGNORECASE),
+     'quality', '"premium" superlative'),
+
+    # "Superior" standalone (not just "superior quality/performance")
+    (re.compile(r'\bsuperior\b', re.IGNORECASE),
+     'high-quality', '"superior" superlative'),
+
+    # "Unparalleled"
+    (re.compile(r'\bunparalleled\b', re.IGNORECASE),
+     'high-performance', 'unverified superlative'),
+
+    # "Top of the line"
+    (re.compile(r'\btop[\s-]of[\s-]the[\s-]line\b', re.IGNORECASE),
+     'high-quality', '"top of the line" superlative'),
+
+    # "Finest"
+    (re.compile(r'\bfinest\b', re.IGNORECASE),
+     'quality', '"finest" superlative'),
+
+    # "Elite" / "luxury" / "deluxe"
+    (re.compile(r'\belite\b', re.IGNORECASE),
+     '', '"elite" superlative'),
+    (re.compile(r'\bluxur(?:y|ious)\b', re.IGNORECASE),
+     '', '"luxury" superlative'),
+    (re.compile(r'\bdeluxe\b', re.IGNORECASE),
+     '', '"deluxe" superlative'),
+
+    # "Second to none" / "like no other"
+    (re.compile(r'\bsecond\s+to\s+none\b', re.IGNORECASE),
+     '', 'unverified superlative'),
+    (re.compile(r'\blike\s+no\s+other\b', re.IGNORECASE),
+     '', 'unverified superlative'),
+    (re.compile(r'\bnothing\s+compares\b', re.IGNORECASE),
+     '', 'unverified superlative'),
+
+    # "Must-have" / "game-changer"
+    (re.compile(r'\bmust[\s-]have\b', re.IGNORECASE),
+     '', 'marketing hype'),
+    (re.compile(r'\bgame[\s-]chang(?:er|ing)\b', re.IGNORECASE),
+     '', 'marketing hype'),
+    (re.compile(r'\blife[\s-]changing\b', re.IGNORECASE),
+     '', 'marketing hype'),
+    (re.compile(r'\bone[\s-]of[\s-]a[\s-]kind\b', re.IGNORECASE),
+     '', 'unverified uniqueness claim'),
+
+    # "Go-to" marketing language
+    (re.compile(r'\bgo[\s-]to\s+(?:choice|option|solution|source|material|product)\b', re.IGNORECASE),
+     'practical choice', '"go-to" marketing language'),
+
+    # "Rigorous" — unverified quality claim
+    (re.compile(r'\brigorous(?:ly)?\b', re.IGNORECASE),
+     'thorough', '"rigorous" unverified claim'),
+
+    # "Virtually" as vague intensifier
+    (re.compile(r'\bvirtually\s+(?:zero|no|any|unlimited|indestructible|impervious)\b', re.IGNORECASE),
+     'extremely low', '"virtually" vague claim'),
+
+    # "Engineered for" — unverified engineering claim
+    (re.compile(r'\bengineered\s+for\b', re.IGNORECASE),
+     'designed for', '"engineered for" unverified claim'),
+
+    # "Ensuring" as guarantee language
+    (re.compile(r'\bensuring\b', re.IGNORECASE),
+     'providing', '"ensuring" guarantee language'),
+
+    # "Performs reliably" / "reliable quality/fit/performance"
+    (re.compile(r'\bperforms?\s+reliably\b', re.IGNORECASE),
+     'performs consistently', 'unverified reliability claim'),
+    (re.compile(r'\breliable\s+(?:quality|fit|performance|results?|material|consistency)\b', re.IGNORECASE),
+     'consistent', 'unverified reliability claim'),
+
+    # "Optimum" / "optimal"
+    (re.compile(r'\boptim(?:um|al)\b', re.IGNORECASE),
+     'high', '"optimum/optimal" superlative'),
+
+    # "Proven" standalone as marketing term
+    (re.compile(r'\bproven\s+(?:performance|results?|quality|durability|strength)\b', re.IGNORECASE),
+     'established', '"proven" unverified claim'),
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
@@ -462,6 +579,14 @@ def validate_and_fix(text: str, field: str = 'text') -> tuple[str, list[str]]:
     violations = []
     clean = text
 
+    # Normalize all-caps section headers to Title Case first
+    def _title_header(m):
+        return m.group(1).title() + m.group(2)
+    new_clean = re.sub(r'([A-Z][A-Z\s&/\-]{3,}[A-Z])(\s*[—:\-])', _title_header, clean)
+    if new_clean != clean:
+        clean = new_clean
+        violations.append(f'[SOFT] {field}: all-caps header — normalized to title case')
+
     for pattern, replacement, label in _HARD_PATTERNS:
         if pattern.search(clean):
             clean = pattern.sub(replacement, clean)
@@ -472,8 +597,10 @@ def validate_and_fix(text: str, field: str = 'text') -> tuple[str, list[str]]:
             clean = pattern.sub(replacement, clean)
             violations.append(f'[SOFT] {field}: {label} — replaced with "{replacement}"')
 
-    # Collapse multiple spaces and blank lines left by removals
+    # Collapse multiple spaces, duplicate words, and blank lines left by removals
+    clean = re.sub(r'\b(\w+)\s+\1\b', r'\1', clean, flags=re.IGNORECASE)  # remove doubled words
     clean = re.sub(r'  +', ' ', clean)
+    clean = re.sub(r'\band\s+(?:certified|compliant|approved)\b', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'\n{3,}', '\n\n', clean).strip()
 
     return clean, violations
