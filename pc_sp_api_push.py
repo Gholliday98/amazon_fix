@@ -322,6 +322,14 @@ def build_patches(row: dict, mkt: str) -> list:
 
     if g('new_title'):
         title, _ = _inject_sku_dims(g('new_title'), sku)
+        # Warn if Acrylic or Nylon title is missing Cast/Extruded designation
+        title_lower = title.lower()
+        if any(m in title_lower for m in ('acrylic', 'nylon')):
+            if 'cast' not in title_lower and 'extruded' not in title_lower:
+                print(f'    [WARN] {sku}: Acrylic/Nylon title missing Cast or Extruded — review manually')
+        # Warn if rod/sheet/tube not in title
+        if not any(f in title_lower for f in ('sheet', 'rod', 'tube', 'bar', 'block', 'panel')):
+            print(f'    [WARN] {sku}: title missing product form (sheet/rod/tube) — review manually')
         p.append({'op': 'replace', 'path': '/attributes/item_name',
                   'value': _txt(title, mkt)})
 

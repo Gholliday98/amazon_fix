@@ -110,12 +110,30 @@ def _make_bullets(row: dict, parsed: dict) -> list[str]:
     return bullets
 
 
+_FORM_KEYWORDS = ('sheet', 'rod', 'tube', 'bar', 'block', 'panel', 'strip', 'film')
+
+
 def _make_description(row: dict, parsed: dict) -> str:
     mat   = (row.get('material_type') or parsed['material'] or 'plastic').strip()
     form  = parsed['product_form'] or 'sheet'
     dims  = parsed['dimensions'] or (row.get('size_description') or '').strip()
     color = (row.get('color') or parsed['color'] or '').strip()
     brand = (row.get('brand') or 'Plastic-Craft').strip()
+
+    # Ensure product form (rod/sheet/tube) is present
+    if not any(kw in form.lower() for kw in _FORM_KEYWORDS):
+        form = 'sheet'  # safe fallback
+
+    # For Acrylic/Nylon, flag if Cast/Extruded missing from form
+    mat_lower = mat.lower()
+    if any(m in mat_lower for m in ('acrylic', 'nylon')):
+        form_lower = form.lower()
+        if 'cast' not in form_lower and 'extruded' not in form_lower:
+            existing = (row.get('new_title') or row.get('original_title') or '').lower()
+            if 'cast' in existing:
+                form = 'Cast ' + form
+            elif 'extruded' in existing:
+                form = 'Extruded ' + form
 
     desc = f'{brand} {mat} {form}'
     if color:

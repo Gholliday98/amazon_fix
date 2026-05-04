@@ -234,7 +234,9 @@ _HARD_PATTERNS = [
     # Implied quality guarantee / process claims (Amazon 99300 violations)
     (re.compile(r'\binspected\s+before\s+shipment\b', re.IGNORECASE),
      'shipped', 'implied inspection guarantee'),
-    (re.compile(r'\btrusted\s+(?:across|by|among|throughout|supplier|partner|source|brand|name)\b', re.IGNORECASE),
+    (re.compile(r'\btrusted\s+(?:across|by|among|throughout)\b', re.IGNORECASE),
+     'established', 'promotional trust claim'),
+    (re.compile(r'\btrusted\b(?=\s+(?:supplier|partner|source|brand|name))', re.IGNORECASE),
      'established', 'promotional trust claim'),
     (re.compile(r'\bmachines?\s+cleanly\b', re.IGNORECASE),
      'easy to machine', 'unverifiable machining claim'),
@@ -441,9 +443,17 @@ _SOFT_PATTERNS = [
     (re.compile(r'\bbillions?\s+of\s+(?:times|cycles)\b', re.IGNORECASE),
      'repeatedly', 'unverifiable quantitative claim'),
 
-    # Freight/shipping policy in description (belongs in seller notes, not content)
+    # Freight / LTL shipping info in listing content (remove entirely)
     (re.compile(r'FREIGHT\s+SHIPPING\s+NOTICE.*?(?=\n\n|\Z)', re.IGNORECASE | re.DOTALL),
-     '', 'shipping policy in description'),
+     '', 'freight notice in listing'),
+    (re.compile(r'\b(?:ships?|shipped|shipping)\s+(?:via|by|using)\s+(?:freight|LTL|truck|common\s+carrier)\b', re.IGNORECASE),
+     '', 'freight shipping reference'),
+    (re.compile(r'\bLTL\s+(?:freight|shipping|delivery|carrier)\b', re.IGNORECASE),
+     '', 'LTL freight reference'),
+    (re.compile(r'\bfreight\s+(?:shipping|delivery|carrier|required|only)\b', re.IGNORECASE),
+     '', 'freight reference in listing'),
+    (re.compile(r'\boversized\s+(?:item|product|shipment|order)\b', re.IGNORECASE),
+     '', 'freight/oversize reference in listing'),
 
     # All-caps section headers in description
     (re.compile(r'\bCOMMON\s+QUESTIONS\s*:', re.IGNORECASE),
@@ -549,6 +559,56 @@ _SOFT_PATTERNS = [
     # "Proven" standalone as marketing term
     (re.compile(r'\bproven\s+(?:performance|results?|quality|durability|strength)\b', re.IGNORECASE),
      'established', '"proven" unverified claim'),
+
+    # Unverifiable emotional/marketing language
+    (re.compile(r'\bincredible\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+    (re.compile(r'\bamazing\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+    (re.compile(r'\bfantastic\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+    (re.compile(r'\bwonderful\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+    (re.compile(r'\bspectacular\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+    (re.compile(r'\bsuperb\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+    (re.compile(r'\bwow\b', re.IGNORECASE),
+     '', 'unverifiable marketing claim'),
+
+    # "Popular" as unverified claim
+    (re.compile(r'\bpopular\s+(?:choice|option|product|material|plastic)\b', re.IGNORECASE),
+     'widely used', '"popular" unverified claim'),
+
+    # Durability promises without data
+    (re.compile(r'\bbuilt\s+to\s+last\b', re.IGNORECASE),
+     'durable', '"built to last" unverified claim'),
+    (re.compile(r'\blong[\s-]lasting\b', re.IGNORECASE),
+     'durable', '"long-lasting" unverified claim'),
+    (re.compile(r'\blasts\s+(?:longer|years|a\s+lifetime|forever)\b', re.IGNORECASE),
+     'durable', 'durability promise'),
+    (re.compile(r'\boutlasts\b', re.IGNORECASE),
+     'outlasts', 'comparative durability claim'),
+
+    # Appeal to emotion / peace of mind language
+    (re.compile(r'\bpeace\s+of\s+mind\b', re.IGNORECASE),
+     '', 'emotional appeal'),
+    (re.compile(r'\bworry[\s-]free\b', re.IGNORECASE),
+     '', 'unverified claim'),
+    (re.compile(r'\bno[\s-]hassle\b', re.IGNORECASE),
+     '', 'unverified claim'),
+    (re.compile(r'\bhassle[\s-]free\b', re.IGNORECASE),
+     '', 'unverified claim'),
+    (re.compile(r'\beffortless(?:ly)?\b', re.IGNORECASE),
+     '', 'unverified claim'),
+    (re.compile(r'\bconfidence\s+(?:knowing|that|in|you)\b', re.IGNORECASE),
+     '', 'emotional appeal'),
+
+    # "You can rely/count/depend on" — trust without evidence
+    (re.compile(r'\byou\s+can\s+(?:rely|count|depend)\s+on\b', re.IGNORECASE),
+     '', 'unverified trust claim'),
+    (re.compile(r'\byou\'?ll\s+(?:love|enjoy|appreciate)\b', re.IGNORECASE),
+     '', 'marketing appeal to emotion'),
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
@@ -597,10 +657,31 @@ def validate_and_fix(text: str, field: str = 'text') -> tuple[str, list[str]]:
             clean = pattern.sub(replacement, clean)
             violations.append(f'[SOFT] {field}: {label} — replaced with "{replacement}"')
 
-    # Collapse multiple spaces, duplicate words, and blank lines left by removals
-    clean = re.sub(r'\b(\w+)\s+\1\b', r'\1', clean, flags=re.IGNORECASE)  # remove doubled words
-    clean = re.sub(r'  +', ' ', clean)
+    # Post-processing cleanup
+    clean = re.sub(r'\b(\w+)\s+\1\b', r'\1', clean, flags=re.IGNORECASE)  # doubled words
     clean = re.sub(r'\band\s+(?:certified|compliant|approved)\b', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\s+,', ',', clean)          # space before comma
+    clean = re.sub(r',\s*,+', ',', clean)        # double commas
+    clean = re.sub(r',\s*\.', '.', clean)        # comma before period
+    clean = re.sub(r'\(\s*\)', '', clean)        # empty parentheses
+    clean = re.sub(r'  +', ' ', clean)           # multiple spaces
+    clean = re.sub(r' \.', '.', clean)           # space before period
+    clean = re.sub(r'\.\.+', '.', clean)          # double periods
+    # Remove comma immediately after a sentence-opening word (orphaned from removed content)
+    clean = re.sub(
+        r'\b(This|The|A|An|Our|Your|Its|These|Those|It|When|For|In|At|By|With|As|And|But|Also)\s*,',
+        r'\1', clean, flags=re.IGNORECASE)
+    # Remove orphaned verb+pronoun before period ("gives you.", "helps us.", etc.)
+    clean = re.sub(r'\b\w+\s+(?:you|them|us|it)\s*\.', '.', clean, flags=re.IGNORECASE)
+    # Remove orphaned comma before a single word before period ("durable, products." → "durable products.")
+    clean = re.sub(r',\s*(\w+)\.', r' \1.', clean)
+    # Remove very short orphaned fragments between periods (". word." or ". word word.")
+    clean = re.sub(r'\.\s+[A-Z]?[a-z]+(?:\s+[a-z]+)?\s*\.', '.', clean)
+    # Remove orphaned conjunctions/prepositions before period
+    clean = re.sub(r'\b(?:and|or|but|with|for|of|in|on|at|to|a|an|the)\s*\.', '.', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'  +', ' ', clean)           # final space collapse
+    clean = re.sub(r' \.', '.', clean)           # catch any new space-before-period
+    clean = re.sub(r'\.\.+', '.', clean)         # catch any new double periods
     clean = re.sub(r'\n{3,}', '\n\n', clean).strip()
 
     return clean, violations
