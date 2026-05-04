@@ -742,16 +742,50 @@ _SOFT_PATTERNS = [
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
-_BACKEND_PROHIBITED = re.compile(
-    r'\b(?:best|top|great|cheap|sale|discount|free|guaranteed|'
-    r'number\s+one|#1|new|amazing|hot|buy|get|wholesale|clearance)\b',
+# Word-level: matched against each whitespace-separated token (lowercased, punctuation stripped).
+_BACKEND_PROHIBITED_WORDS = re.compile(
+    r'^(?:'
+    r'best|better|greatest|finest|ultimate|premier|superior|supreme'
+    r'|unmatched|unrivaled|unsurpassed|unbeatable|unparalleled'
+    r'|exceptional|outstanding|remarkable|incredible|amazing|fantastic'
+    r'|wonderful|spectacular|superb|awesome|excellent|extraordinary|phenomenal'
+    r'|free|cheap|cheaper|cheapest|sale|sales|discount|discounted|discounts'
+    r'|clearance|bargain|deal|deals|offer|offers|wholesale|affordable|budget'
+    r'|limited|exclusive|rare|must-have|hurry|urgent'
+    r'|buy|order|shop|purchase|grab|click'
+    r'|number-one|top-rated|award-winning|world-class|industry-leading'
+    r'|guaranteed|guarantee|guarantees|warranty|warranted'
+    r'|very|really|extremely|absolutely|totally|completely'
+    r')$',
     re.IGNORECASE
 )
 
+# Competitor brand names — matched against each token using \b anchors
 _COMPETITOR_BRANDS = re.compile(
-    r'\b(?:plexiglas|lucite|lexan|formica|corian|kydex|ultra[\s-]high[\s-]molecular)\b',
+    r'\b(?:'
+    r'plexiglas(?:s)?|lucite|perspex|acrylite|optix|duoplex|polycast|altuglas'
+    r'|altuclear|deglas|evocryl'
+    r'|lexan|makrolon|tuffak|palglas|palsun|palgreen|hygard'
+    r'|kydex|formica|corian|wilsonart'
+    r'|stok|norstok'
+    r'|palram|vivak|vekaplan|simona'
+    r')\b',
     re.IGNORECASE
 )
+
+# Phrase-level patterns for backend terms (match against entire string, not per-word)
+_BACKEND_PHRASE_PATTERNS = [
+    (re.compile(r'\bhttps?://\S+', re.IGNORECASE),          'URL'),
+    (re.compile(r'\bwww\.\S+', re.IGNORECASE),              'URL'),
+    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'), 'email address'),
+    (re.compile(r'\b\d{3}[\s.\-]?\d{3}[\s.\-]?\d{4}\b'),   'phone number'),
+    (re.compile(r'[®™©]'),                                   'trademark symbol'),
+    (re.compile(r'<[^>]+>'),                                 'HTML tag'),
+    # ASIN patterns
+    (re.compile(r'\bB0[A-Z0-9]{8}\b'),                       'ASIN reference'),
+    # Competitor ASIN-like codes
+    (re.compile(r'\b(?:number\s+one|#\s*1)\b', re.IGNORECASE), 'promotional claim'),
+]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -819,25 +853,86 @@ def validate_and_fix(text: str, field: str = 'text') -> tuple[str, list[str]]:
 
 def check_backend_terms(terms: str) -> tuple[str, list[str]]:
     """
-    Scrub Amazon-prohibited words from backend search terms.
+    Scrub Amazon-prohibited words/phrases from backend search terms.
     Returns (clean_terms, violations).
+
+    Strips:
+    - Competitor brand names (Plexiglas, Lexan, STOK, etc.)
+    - Promotional / marketing words (best, free, sale, discount, etc.)
+    - Trademark symbols (® ™ ©)
+    - Contact info (URLs, emails, phone numbers)
+    - HTML tags
+    - ASIN references
+    - Duplicate tokens (case-insensitive)
+    - Truncates to 249 bytes if needed
     """
     if not terms:
         return terms, []
 
     violations = []
-    words = terms.split()
+    clean = terms
+
+    # Phase 1: phrase-level patterns (apply to whole string before tokenizing)
+    for pattern, label in _BACKEND_PHRASE_PATTERNS:
+        if pattern.search(clean):
+            clean = pattern.sub('', clean)
+            violations.append(f'[HARD] backend_terms: {label} — removed')
+
+    # Collapse extra whitespace from removals
+    clean = re.sub(r'\s+', ' ', clean).strip()
+
+    # Phase 2: token-level filtering
+    seen_lower: set[str] = set()
     clean_words = []
 
-    for word in words:
-        if _BACKEND_PROHIBITED.fullmatch(word):
-            violations.append(f'[HARD] backend_terms: prohibited word "{word}" — removed')
-        elif _COMPETITOR_BRANDS.search(word):
-            violations.append(f'[HARD] backend_terms: competitor brand "{word}" — removed')
-        else:
-            clean_words.append(word)
+    for token in clean.split():
+        # Strip leading/trailing punctuation for the check, but keep original form
+        bare = token.strip('.,;:!?()[]{}"\'-_/')
+        bare_lower = bare.lower()
 
-    return ' '.join(clean_words), violations
+        if not bare_lower:
+            continue
+
+        # Deduplicate (case-insensitive)
+        if bare_lower in seen_lower:
+            violations.append(f'[SOFT] backend_terms: duplicate term "{token}" — removed')
+            continue
+
+        # Check against prohibited word list (exact token match)
+        if _BACKEND_PROHIBITED_WORDS.fullmatch(bare_lower):
+            violations.append(
+                f'[HARD] backend_terms: prohibited word "{token}" — removed')
+            continue
+
+        # Check for competitor brand names embedded in the token
+        if _COMPETITOR_BRANDS.search(bare_lower):
+            violations.append(
+                f'[HARD] backend_terms: competitor brand "{token}" — removed')
+            continue
+
+        # Drop lone single-letter tokens (noise), keep numbers and 2+ char words
+        if len(bare_lower) == 1 and not bare_lower.isdigit():
+            continue
+
+        seen_lower.add(bare_lower)
+        clean_words.append(token)
+
+    clean = ' '.join(clean_words)
+
+    # Phase 3: enforce 249-byte limit
+    encoded = clean.encode('utf-8')
+    if len(encoded) > 249:
+        # Trim at byte boundary, then strip any incomplete token at the end
+        truncated = encoded[:249].decode('utf-8', errors='ignore').rstrip()
+        # Don't leave a trailing partial word
+        last_space = truncated.rfind(' ')
+        if last_space > 0:
+            truncated = truncated[:last_space]
+        clean = truncated
+        violations.append(
+            f'[HARD] backend_terms: exceeded 249 bytes — truncated to {len(clean.encode())} bytes')
+
+    return clean, violations
 
 
 def validate_all_fields(content: dict, mkt_id: str = '') -> tuple[dict, list[str]]:
