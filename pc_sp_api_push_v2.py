@@ -57,6 +57,7 @@ import re
 import sys
 import time
 from datetime import datetime
+from urllib.parse import quote
 from pathlib import Path
 
 try:
@@ -166,7 +167,7 @@ def sp_request(method: str, path: str, tokens: TokenManager,
 def get_listing_product_type(tokens: TokenManager, seller_id: str,
                               marketplace_id: str, sku: str) -> str | None:
     """Return productType for an existing SKU, or None if not found."""
-    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
                    tokens, params={'marketplaceIds': marketplace_id})
     if r.status_code == 404:
         return None
@@ -246,7 +247,7 @@ def patch_listing(tokens: TokenManager, seller_id: str, marketplace_id: str,
                    sku: str, product_type: str, patches: list) -> tuple[int, dict]:
     """PATCH a listing.  Returns (status_code, response_json)."""
     body = {'productType': product_type, 'patches': patches}
-    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
                    tokens, params={'marketplaceIds': marketplace_id}, body=body)
     try:
         payload = r.json()
