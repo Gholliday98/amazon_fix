@@ -62,6 +62,12 @@ try:
 except ImportError:
     _VALIDATOR_AVAILABLE = False
 
+try:
+    from pc_preflight import preflight_check
+    _PREFLIGHT_AVAILABLE = True
+except ImportError:
+    _PREFLIGHT_AVAILABLE = False
+
 # ─── Paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR   = Path(__file__).parent
 RUN_ID       = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -486,6 +492,19 @@ def main():
                 print(f'    NOW: {title}')
             else:
                 print(f'  [{n}/{len(rows)}] {sku}')
+
+            # ── Preflight check ───────────────────────────────────────────────
+            if _PREFLIGHT_AVAILABLE:
+                pf = preflight_check(row, fix_truncate=True)
+                for w in pf.warnings:
+                    print(f'    [PREFLIGHT WARN] {w}')
+                if pf.blocked:
+                    for e in pf.errors:
+                        print(f'    [PREFLIGHT BLOCK] {e}')
+                    record(sku, asin, title, 0, 'error', 'PreflightFailed',
+                           ' | '.join(pf.errors))
+                    stats['error'] += 1
+                    continue
 
             # ── Build patches ─────────────────────────────────────────────────
             patches = build_patches(row, mkt)
