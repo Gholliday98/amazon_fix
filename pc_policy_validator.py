@@ -315,8 +315,86 @@ _HARD_PATTERNS = [
      '', 'unverified ISO certification claim'),
     (re.compile(r'\bASTM\b', re.IGNORECASE),
      '', 'unverified ASTM standard reference'),
+
+    # Clarity / appearance claims (unverifiable without lab data)
     (re.compile(r'\boptical\s+clarity\b', re.IGNORECASE),
      'visual clarity', 'optical clarity claim'),
+    (re.compile(r'\bcrystal[\s-]?clear\b', re.IGNORECASE),
+     'clear', 'unverified clarity claim'),
+    (re.compile(r'\bcrystal[\s-]?clarity\b', re.IGNORECASE),
+     'clarity', 'unverified clarity claim'),
+    (re.compile(r'\bglass[\s-]?clear\b', re.IGNORECASE),
+     'clear', 'unverified clarity claim'),
+    (re.compile(r'\bglass[\s-]?like\s+clarity\b', re.IGNORECASE),
+     'high clarity', 'unverified clarity claim'),
+    (re.compile(r'\bwater[\s-]?clear\b', re.IGNORECASE),
+     'clear', 'unverified clarity claim'),
+    (re.compile(r'\bdiamond[\s-]?clear\b', re.IGNORECASE),
+     'clear', 'unverified clarity claim'),
+    (re.compile(r'\boptically[\s-]?clear\b', re.IGNORECASE),
+     'transparent', 'unverified optical claim'),
+    (re.compile(r'\bflawless\b', re.IGNORECASE),
+     '', 'unverifiable appearance claim'),
+    (re.compile(r'\bpristine\b', re.IGNORECASE),
+     '', 'unverifiable appearance claim'),
+    (re.compile(r'\bimmaculate\b', re.IGNORECASE),
+     '', 'unverifiable appearance claim'),
+    (re.compile(r'\bblemish[\s-]free\b', re.IGNORECASE),
+     '', 'unverifiable appearance claim'),
+    (re.compile(r'\bspotless\b', re.IGNORECASE),
+     '', 'unverifiable appearance claim'),
+
+    # Safety claims (require certification)
+    (re.compile(r'\bsafe\s+(?:to\s+use|for\s+use|around|with|for\s+children|for\s+pets)\b', re.IGNORECASE),
+     '', 'unverified safety claim'),
+    (re.compile(r'\bhygienic\b', re.IGNORECASE),
+     '', 'unverified hygiene claim'),
+    (re.compile(r'\bsanitary\b', re.IGNORECASE),
+     '', 'unverified sanitary claim'),
+    (re.compile(r'\bodor[\s-]?(?:free|resistant|proof|reducing|eliminating)\b', re.IGNORECASE),
+     '', 'unverified odor claim'),
+    (re.compile(r'\bstain[\s-]?(?:resistant|proof|free|repellent)\b', re.IGNORECASE),
+     '', 'unverified stain claim'),
+
+    # Strength / durability claims without specs
+    (re.compile(r'\bunbreakable\b', re.IGNORECASE),
+     'impact resistant', 'unverifiable strength claim'),
+    (re.compile(r'\bindestructible\b', re.IGNORECASE),
+     'highly durable', 'unverifiable strength claim'),
+    (re.compile(r'\bshatterproof\b', re.IGNORECASE),
+     'impact resistant', 'unverified shatterproof claim'),
+    (re.compile(r'\bbullet[\s-]?(?:proof|resistant)\b', re.IGNORECASE),
+     '', 'unverified ballistic claim'),
+
+    # Craftsmanship / selection claims
+    (re.compile(r'\bhand[\s-]?(?:picked|selected|crafted|finished|made)\b', re.IGNORECASE),
+     '', 'unverifiable craftsmanship claim'),
+    (re.compile(r'\bcarefully[\s-]?(?:selected|crafted|inspected|sourced)\b', re.IGNORECASE),
+     '', 'unverifiable process claim'),
+    (re.compile(r'\bmeticulously\b', re.IGNORECASE),
+     '', 'unverifiable process claim'),
+    (re.compile(r'\bpainstakingly\b', re.IGNORECASE),
+     '', 'unverifiable process claim'),
+    (re.compile(r'\battention\s+to\s+detail\b', re.IGNORECASE),
+     '', 'unverifiable process claim'),
+
+    # Comparison / competitive claims
+    (re.compile(r'\bunlike\s+(?:others?|competitors?|other\s+brands?)\b', re.IGNORECASE),
+     '', 'competitor comparison claim'),
+    (re.compile(r'\bcompared\s+to\s+other\b', re.IGNORECASE),
+     '', 'competitor comparison claim'),
+
+    # "Pure" as marketing claim
+    (re.compile(r'\bpure\s+(?:clarity|quality|performance|plastic|material)\b', re.IGNORECASE),
+     '', 'unverifiable purity claim'),
+
+    # Percentage claims without context
+    (re.compile(r'\b\d+\s*%\s*(?:effective|efficient|pure|clear|stronger|better)\b', re.IGNORECASE),
+     '', 'unverified percentage claim'),
+
+    # "Approved" in any context (implies regulatory approval)
+    (re.compile(r'\b(?:widely\s+)?approved\s+(?:for|by|in)\b', re.IGNORECASE),
+     '', 'implied regulatory approval'),
     (re.compile(r'\bCE[\s-](?:certified|compliant|marked|approved|listed)\b', re.IGNORECASE),
      '', 'unverified CE mark claim'),
     (re.compile(r'\bUL[\s-](?:listed|certified|approved|rated)\b', re.IGNORECASE),
@@ -609,6 +687,58 @@ _SOFT_PATTERNS = [
      '', 'unverified trust claim'),
     (re.compile(r'\byou\'?ll\s+(?:love|enjoy|appreciate)\b', re.IGNORECASE),
      '', 'marketing appeal to emotion'),
+
+    # "Perfect" standalone as superlative
+    (re.compile(r'\bperfect\b', re.IGNORECASE),
+     'suitable', '"perfect" superlative'),
+
+    # "Ideal" standalone (we catch "ideal for" already but not standalone)
+    (re.compile(r'\bideal\b', re.IGNORECASE),
+     'suitable', '"ideal" superlative'),
+
+    # "Innovative" — we use as replacement but ban as original marketing word
+    (re.compile(r'\binnovative\b', re.IGNORECASE),
+     'functional', '"innovative" unverified claim'),
+
+    # "Advanced" as vague marketing (when not describing a spec)
+    (re.compile(r'\bmost\s+advanced\b', re.IGNORECASE),
+     'highly functional', '"most advanced" superlative'),
+
+    # "Heavy-duty" as unverifiable marketing claim
+    (re.compile(r'\bheavy[\s-]duty\b', re.IGNORECASE),
+     'industrial-grade', '"heavy-duty" unverified claim'),
+
+    # "Commercial-grade" / "industrial-grade" without certification
+    (re.compile(r'\bcommercial[\s-]grade\b', re.IGNORECASE),
+     'commercial quality', 'unverified grade claim'),
+
+    # "Exceed" expectations type claims
+    (re.compile(r'\bexceeds?\s+(?:expectations?|standards?|requirements?)\b', re.IGNORECASE),
+     'meets', 'unverifiable performance claim'),
+
+    # "Specially designed/formulated/engineered"
+    (re.compile(r'\bspecially\s+(?:designed|formulated|engineered|crafted|treated)\b', re.IGNORECASE),
+     'designed', 'unverifiable process claim'),
+
+    # "Preferred by" professionals — unverifiable endorsement
+    (re.compile(r'\bpreferred\s+by\b', re.IGNORECASE),
+     'used by', 'unverified preference claim'),
+
+    # "Trusted by" — unverifiable
+    (re.compile(r'\btrusted\s+by\b', re.IGNORECASE),
+     'used by', 'unverified trust claim'),
+
+    # "Widely recognized" — unverifiable
+    (re.compile(r'\bwidely\s+(?:recognized|regarded|considered|known)\b', re.IGNORECASE),
+     'commonly', 'unverifiable recognition claim'),
+
+    # "The right choice" / "smart choice" — marketing
+    (re.compile(r'\b(?:the\s+)?(?:right|smart|wise|obvious)\s+choice\b', re.IGNORECASE),
+     'a practical choice', 'marketing claim'),
+
+    # "Never" + performance claim (unverifiable absolute) — catch "never warps or cracks" as unit
+    (re.compile(r'\bnever\s+(?:warps?|cracks?|fades?|rusts?|rots?|splinters?|chips?)(?:\s+or\s+(?:warps?|cracks?|fades?|rusts?|rots?|splinters?|chips?))*\b', re.IGNORECASE),
+     'resists damage', 'unverifiable absolute performance claim'),
 ]
 
 # ── Backend search term prohibited words ──────────────────────────────────────
