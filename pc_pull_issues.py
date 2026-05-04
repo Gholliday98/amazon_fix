@@ -48,7 +48,7 @@ RUN_ID       = datetime.now().strftime('%Y%m%d_%H%M%S')
 LWA_ENDPOINT = 'https://api.amazon.com/auth/o2/token'
 SP_API_BASE  = 'https://sellingpartnerapi-na.amazon.com'
 MAX_RETRIES  = 3
-REQUEST_GAP  = 0.5   # conservative — issues endpoint is read-only but still throttled
+REQUEST_GAP  = 0.2   # issues endpoint rate limit is ~5 req/sec
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -225,6 +225,8 @@ def main():
     # For summary grouping
     by_code: dict[str, list[dict]] = defaultdict(list)
 
+    start_time = time.time()
+
     with open(issues_out, 'w', newline='', encoding='utf-8') as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
@@ -233,8 +235,12 @@ def main():
             sku  = item['sku']
             asin = item['asin']
 
-            if n % 50 == 0 or n == 1:
-                print(f'  [{n}/{total_skus}] scanning...')
+            pct      = n / total_skus * 100
+            elapsed  = time.time() - start_time
+            eta_secs = int((elapsed / n) * (total_skus - n)) if n > 1 else 0
+            eta_str  = f'{eta_secs // 60}m {eta_secs % 60}s'
+            if n % 25 == 0 or n == 1:
+                print(f'  [{n}/{total_skus}] {pct:.0f}%  |  issues found: {skus_with_issues}  |  ETA: {eta_str}')
 
             try:
                 issues = get_issues(tokens, seller, mkt, sku)
