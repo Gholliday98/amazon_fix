@@ -158,11 +158,12 @@ def get_product_type(tokens: TokenManager, seller_id: str,
 def clear_style_attribute(tokens: TokenManager, seller_id: str,
                            marketplace_id: str, sku: str,
                            product_type: str) -> tuple[int, dict]:
-    """Send PATCH op:delete for /attributes/style. Returns (status_code, payload)."""
+    """Send PATCH to clear /attributes/style. Returns (status_code, payload).
+    Uses op:replace with empty array — Amazon rejects op:delete for style."""
     body = {
         'productType': product_type,
         'patches': [
-            {'op': 'delete', 'path': '/attributes/style'}
+            {'op': 'replace', 'path': '/attributes/style', 'value': []}
         ],
     }
     r = sp_request('PATCH',
