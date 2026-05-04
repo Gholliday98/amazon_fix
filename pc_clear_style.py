@@ -157,13 +157,18 @@ def get_product_type(tokens: TokenManager, seller_id: str,
 
 def clear_style_attribute(tokens: TokenManager, seller_id: str,
                            marketplace_id: str, sku: str,
-                           product_type: str) -> tuple[int, dict]:
-    """Send PATCH to clear /attributes/style. Returns (status_code, payload).
-    Uses op:replace with empty array — Amazon rejects op:delete for style."""
+                           product_type: str,
+                           replacement: str = 'Standard') -> tuple[int, dict]:
+    """Replace invalid style value with a neutral valid value.
+    Amazon rejects both op:delete and op:replace with empty array for style,
+    so we replace with a neutral term ('Standard' by default)."""
     body = {
         'productType': product_type,
         'patches': [
-            {'op': 'replace', 'path': '/attributes/style', 'value': []}
+            {'op': 'replace', 'path': '/attributes/style',
+             'value': [{'value': replacement,
+                        'language_tag': 'en_US',
+                        'marketplace_id': marketplace_id}]},
         ],
     }
     r = sp_request('PATCH',
@@ -357,7 +362,7 @@ def main():
             time.sleep(REQUEST_GAP)
             continue
 
-        # Step 2: PATCH delete style
+        # Step 2: PATCH replace style with neutral value
         try:
             status, payload = clear_style_attribute(tokens, seller, mkt, sku, product_type)
         except Exception as e:
