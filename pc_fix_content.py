@@ -367,6 +367,8 @@ def main():
                     help='Show what would be dropped without pushing')
     ap.add_argument('--limit', type=int, metavar='N',
                     help='Only process first N listings (for testing)')
+    ap.add_argument('--verbose', action='store_true',
+                    help='With --dry-run, show full before/after content for each field')
     args = ap.parse_args()
 
     issues_path = Path(args.issues)
@@ -406,7 +408,6 @@ def main():
     if args.dry_run:
         print('  Showing aggressive clean results:\n')
         total_dropped_bullets = 0
-        total_dropped_sentences = 0
 
         for row in rows:
             sku    = (row.get('sku') or '').strip()
@@ -414,24 +415,50 @@ def main():
             cleaned, viols = clean_row_aggressive(row)
 
             dropped_bullets = [
-                f'bullet{i+1}'
-                for i, bf in enumerate(BULLET_FIELDS)
+                bf for bf in BULLET_FIELDS
                 if (row.get(bf) or '').strip() and not (cleaned.get(bf) or '').strip()
+            ]
+            changed_bullets = [
+                bf for bf in BULLET_FIELDS
+                if (row.get(bf) or '').strip() and (cleaned.get(bf) or '').strip()
+                and (row.get(bf) or '').strip() != (cleaned.get(bf) or '').strip()
             ]
             hard_viols = [v for v in viols if '[HARD]' in v]
             soft_viols = [v for v in viols if '[SOFT]' in v]
             total_dropped_bullets += len(dropped_bullets)
 
+            title_changed = (row.get('new_title') or '').strip() != (cleaned.get('new_title') or '').strip()
+            desc_changed  = (row.get('description') or '').strip() != (cleaned.get('description') or '').strip()
+
             if viols or dropped_bullets:
                 print(f'  {sku} ({asin})')
-                if dropped_bullets:
-                    print(f'    Dropped bullets : {", ".join(dropped_bullets)}')
-                if hard_viols:
-                    print(f'    Hard violations : {len(hard_viols)}')
-                    for v in hard_viols[:3]:
-                        print(f'      {v}')
-                if soft_viols:
-                    print(f'    Soft fixes      : {len(soft_viols)}')
+
+                if args.verbose:
+                    if title_changed:
+                        print(f'    TITLE before : {(row.get("new_title") or "")[:120]}')
+                        print(f'    TITLE after  : {(cleaned.get("new_title") or "")[:120]}')
+                    for bf in dropped_bullets:
+                        print(f'    DROP {bf}  : {(row.get(bf) or "")[:120]}')
+                    for bf in changed_bullets:
+                        print(f'    EDIT {bf} before: {(row.get(bf) or "")[:120]}')
+                        print(f'    EDIT {bf} after : {(cleaned.get(bf) or "")[:120]}')
+                    if desc_changed:
+                        orig_desc  = (row.get('description') or '').strip()
+                        clean_desc = (cleaned.get('description') or '').strip()
+                        orig_lines  = orig_desc.splitlines()
+                        clean_lines = clean_desc.splitlines()
+                        if len(orig_lines) != len(clean_lines) or orig_desc != clean_desc:
+                            print(f'    DESC before : {orig_desc[:200]}')
+                            print(f'    DESC after  : {clean_desc[:200]}')
+                else:
+                    if dropped_bullets:
+                        print(f'    Dropped bullets : {", ".join(dropped_bullets)}')
+                    if hard_viols:
+                        print(f'    Hard violations : {len(hard_viols)}')
+                        for v in hard_viols[:3]:
+                            print(f'      {v}')
+                    if soft_viols:
+                        print(f'    Soft fixes      : {len(soft_viols)}')
             else:
                 print(f'  {sku} ({asin}) — clean')
 
@@ -448,7 +475,16 @@ def main():
     ok_count    = 0
     skip_count  = 0
     error_count = 0
-    results     = []
+
+    result_fields = ['sku', 'asin', 'status', 'product_type', 'detail']
+    results_fh = open(RESULTS_FILE, 'w', newline='', encoding='utf-8')
+    results_writer = csv.DictWriter(results_fh, fieldnames=result_fields, extrasaction='ignore')
+    results_writer.writeheader()
+    results_fh.flush()
+
+    def write_result(r):
+        results_writer.writerow(r)
+        results_fh.flush()
 
     for n, row in enumerate(rows, 1):
         sku  = (row.get('sku') or '').strip()
@@ -465,14 +501,14 @@ def main():
             product_type = get_product_type(tokens, seller, mkt, sku)
         except Exception as e:
             print(f'GET ERROR: {e}')
-            results.append({'sku': sku, 'asin': asin, 'status': 'GET_ERROR', 'detail': str(e)})
+            write_result({'sku': sku, 'asin': asin, 'status': 'GET_ERROR', 'detail': str(e)})
             error_count += 1
             time.sleep(REQUEST_GAP)
             continue
 
         if not product_type:
             print('NOT FOUND — skipped')
-            results.append({'sku': sku, 'asin': asin, 'status': 'NOT_FOUND', 'detail': ''})
+            write_result({'sku': sku, 'asin': asin, 'status': 'NOT_FOUND', 'detail': ''})
             skip_count += 1
             time.sleep(REQUEST_GAP)
             continue
@@ -480,7 +516,7 @@ def main():
         patches = build_patches(row, mkt)
         if not patches:
             print('NO CONTENT — skipped')
-            results.append({'sku': sku, 'asin': asin, 'status': 'NO_CONTENT', 'detail': ''})
+            write_result({'sku': sku, 'asin': asin, 'status': 'NO_CONTENT', 'detail': ''})
             skip_count += 1
             time.sleep(REQUEST_GAP)
             continue
@@ -489,7 +525,7 @@ def main():
             status, payload = patch_listing(tokens, seller, mkt, sku, product_type, patches)
         except Exception as e:
             print(f'PATCH ERROR: {e}')
-            results.append({'sku': sku, 'asin': asin, 'status': 'PATCH_ERROR', 'detail': str(e)})
+            write_result({'sku': sku, 'asin': asin, 'status': 'PATCH_ERROR', 'detail': str(e)})
             error_count += 1
             time.sleep(REQUEST_GAP)
             continue
@@ -504,26 +540,20 @@ def main():
             drop_note = f'  dropped: {", ".join(dropped)}' if dropped else ''
             print(f'OK  ({product_type}){drop_note}'
                   + (f'  warn: {warn_msgs[:60]}' if warn_msgs else ''))
-            results.append({'sku': sku, 'asin': asin, 'status': 'OK',
-                             'product_type': product_type,
-                             'detail': (', '.join(dropped) if dropped else '') or warn_msgs})
+            write_result({'sku': sku, 'asin': asin, 'status': 'OK',
+                          'product_type': product_type,
+                          'detail': (', '.join(dropped) if dropped else '') or warn_msgs})
             ok_count += 1
         else:
             detail = err_msgs or str(payload)[:200]
             print(f'FAIL  HTTP {status}  {detail[:100]}')
-            results.append({'sku': sku, 'asin': asin, 'status': f'HTTP_{status}',
-                             'product_type': product_type, 'detail': detail[:300]})
+            write_result({'sku': sku, 'asin': asin, 'status': f'HTTP_{status}',
+                          'product_type': product_type, 'detail': detail[:300]})
             error_count += 1
 
         time.sleep(REQUEST_GAP)
 
-    with open(RESULTS_FILE, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(
-            f, fieldnames=['sku', 'asin', 'status', 'product_type', 'detail'],
-            extrasaction='ignore')
-        writer.writeheader()
-        for r in results:
-            writer.writerow(r)
+    results_fh.close()
 
     print(f'\n{"═" * 60}')
     print(f'  Pushed OK  : {ok_count}')
