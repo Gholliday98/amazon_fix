@@ -382,6 +382,8 @@ def main():
                     help='Show what would be dropped without pushing')
     ap.add_argument('--limit', type=int, metavar='N',
                     help='Only process first N listings (for testing)')
+    ap.add_argument('--skip', type=int, metavar='N', default=0,
+                    help='Skip the first N listings (use with --limit to page through)')
     ap.add_argument('--verbose', action='store_true',
                     help='With --dry-run, show full before/after content for each field')
     args = ap.parse_args()
@@ -405,6 +407,8 @@ def main():
         print('[ERROR] No matching rows found in feed CSVs.')
         sys.exit(1)
 
+    if args.skip:
+        rows = rows[args.skip:]
     if args.limit:
         rows = rows[:args.limit]
 
