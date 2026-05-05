@@ -65,9 +65,9 @@ REQUEST_GAP  = 0.25
 BULLET_FIELDS = [f'bullet{i}' for i in range(1, 6)]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Credentials + token
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def load_credentials() -> dict:
     c = {
@@ -106,9 +106,9 @@ class TokenManager:
         return self._tok
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # SP-API
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def sp_request(method, path, tokens, params=None, body=None):
     url     = f'{SP_API_BASE}{path}'
@@ -157,9 +157,9 @@ def patch_listing(tokens, seller_id, marketplace_id, sku, product_type, patches)
         return r.status_code, {'raw': r.text[:300]}
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Aggressive cleaning
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def clean_title(text: str) -> tuple[str, list[str]]:
     """Word/phrase level — inline fixes only. Cannot drop a title."""
@@ -266,9 +266,9 @@ def clean_row_aggressive(row: dict) -> tuple[dict, list[str]]:
     return cleaned, all_viols
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Patch builder
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def _txt(v, mkt):
     return [{'value': v, 'language_tag': 'en_US', 'marketplace_id': mkt}]
@@ -302,9 +302,9 @@ def build_patches(row: dict, mkt: str) -> list:
     return p
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Data loading
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def load_target_asins(issues_path: Path, codes: set[str]) -> set[str]:
     """Return ASINs that have any of the specified error codes (empty set = all codes)."""
@@ -350,9 +350,9 @@ def load_feed_rows(target_asins: set[str]) -> list[dict]:
     return list(found.values())
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Main
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def main():
     ap = argparse.ArgumentParser(
@@ -395,7 +395,7 @@ def main():
 
     code_label = 'ALL CODES' if args.all_codes else args.codes
 
-    print(f'\n{"═" * 60}')
+    print(f'\n{"=" * 60}')
     print('  PC Fix Content — Aggressive Clean')
     print(f'  Run ID    : {RUN_ID}')
     print(f'  Issues    : {issues_path.name}')
@@ -403,7 +403,7 @@ def main():
     print(f'  Target    : {len(target_asins)} ASINs')
     print(f'  In feed   : {len(rows)} rows')
     print(f'  Mode      : {"DRY RUN" if args.dry_run else "LIVE"}')
-    print(f'{"═" * 60}\n')
+    print(f'{"=" * 60}\n')
 
     if args.dry_run:
         print('  Showing aggressive clean results:\n')
@@ -555,12 +555,12 @@ def main():
 
     results_fh.close()
 
-    print(f'\n{"═" * 60}')
+    print(f'\n{"=" * 60}')
     print(f'  Pushed OK  : {ok_count}')
     print(f'  Skipped    : {skip_count}')
     print(f'  Errors     : {error_count}')
     print(f'  Results    : {RESULTS_FILE.name}')
-    print(f'{"═" * 60}')
+    print(f'{"=" * 60}')
 
     if ok_count:
         print(f'\n  {ok_count} listings cleaned and pushed.')
