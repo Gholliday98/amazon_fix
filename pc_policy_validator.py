@@ -277,6 +277,26 @@ _HARD_PATTERNS = [
     (re.compile(r'\bships?\s+from\s+[\w\s,]+(?:\.|$)', re.IGNORECASE),
      '', 'shipping info in listing content'),
 
+    # Business location / address (seller contact info prohibited in listings)
+    (re.compile(r'\bwest\s+nyack\b', re.IGNORECASE),
+     '', 'seller location in listing'),
+    (re.compile(r'\bnyack\b', re.IGNORECASE),
+     '', 'seller location in listing'),
+    (re.compile(r'\b\d+\s+\w+\s+(?:street|st|avenue|ave|road|rd|drive|dr|blvd|lane|ln|way|court|ct)\b', re.IGNORECASE),
+     '', 'street address in listing'),
+    (re.compile(r'\b(?:new\s+york|ny)\s+\d{5}\b', re.IGNORECASE),
+     '', 'address/zip code in listing'),
+
+    # Generic compliance language (unverifiable without certification)
+    (re.compile(r'\bin\s+compliance\s+with\b', re.IGNORECASE),
+     '', 'unverified compliance claim'),
+    (re.compile(r'\bmeets?\s+(?:all\s+)?(?:applicable\s+)?(?:federal|state|local|industry)\s+(?:standards?|requirements?|regulations?|codes?)\b', re.IGNORECASE),
+     '', 'unverified compliance claim'),
+    (re.compile(r'\bfully\s+compliant\b', re.IGNORECASE),
+     '', 'unverified compliance claim'),
+    (re.compile(r'\bcompliance[\s-](?:tested|verified|certified|approved)\b', re.IGNORECASE),
+     '', 'unverified compliance claim'),
+
     (re.compile(r'\bBPA[\s-]free\b', re.IGNORECASE),
      '', 'unverified BPA-free claim'),
     (re.compile(r'\blead[\s-]free\b', re.IGNORECASE),
