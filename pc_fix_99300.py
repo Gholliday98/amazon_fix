@@ -355,11 +355,41 @@ def main():
                          'pulling cast/extruded from live Amazon titles')
     ap.add_argument('--default-designation', metavar='WORD', choices=['cast', 'extruded'],
                     help='Fallback designation (cast or extruded) when not found in listing')
+    ap.add_argument('--designations-csv', metavar='FILE',
+                    help='CSV with columns sku,designation — overrides live lookup for matched SKUs')
+    ap.add_argument('--make-template', metavar='RESULTS_FILE',
+                    help='Generate a blank designations CSV from NEEDS_MANUAL rows and exit')
     ap.add_argument('--dry-run', action='store_true',
                     help='Validate and show changes without pushing to Amazon')
     ap.add_argument('--limit', type=int, metavar='N',
                     help='Only process first N listings (for testing)')
     args = ap.parse_args()
+
+    if not args.issues and not args.rerun_blocked and not args.make_template:
+        ap.error('Provide either --issues, --rerun-blocked, or --make-template')
+
+    # ── Generate designation template ─────────────────────────────────────────
+    if args.make_template:
+        src = Path(args.make_template)
+        if not src.is_absolute():
+            src = SCRIPT_DIR / src
+        if not src.exists():
+            print(f'[ERROR] File not found: {src}')
+            sys.exit(1)
+        template_path = SCRIPT_DIR / f'pc_designations_{RUN_ID}.csv'
+        count = 0
+        with open(src, newline='', encoding='utf-8', errors='replace') as fin, \
+             open(template_path, 'w', newline='', encoding='utf-8') as fout:
+            writer = csv.writer(fout)
+            writer.writerow(['sku', 'asin', 'designation'])
+            for row in csv.DictReader(fin):
+                if row.get('status', '').upper() in ('BLOCKED', 'NEEDS_MANUAL'):
+                    writer.writerow([row.get('sku', ''), row.get('asin', ''), ''])
+                    count += 1
+        print(f'  Template written: {template_path.name}  ({count} rows)')
+        print(f'  Fill in "cast" or "extruded" in the designation column, then run:')
+        print(f'  python pc_fix_99300.py --rerun-blocked {src.name} --designations-csv {template_path.name}')
+        return
 
     if not args.issues and not args.rerun_blocked:
         ap.error('Provide either --issues or --rerun-blocked')
@@ -384,6 +414,20 @@ def main():
             sys.exit(0)
 
         print(f'\n  Found {len(blocked_rows)} SKUs (BLOCKED/NEEDS_MANUAL) — loading feed data...')
+
+        # Load designations CSV if provided
+        designation_map: dict[str, str] = {}
+        if args.designations_csv:
+            dcsv = Path(args.designations_csv)
+            if not dcsv.is_absolute():
+                dcsv = SCRIPT_DIR / dcsv
+            with open(dcsv, newline='', encoding='utf-8', errors='replace') as f:
+                for r in csv.DictReader(f):
+                    sku_key = (r.get('sku') or '').strip()
+                    desig   = (r.get('designation') or '').strip().capitalize()
+                    if sku_key and desig in ('Cast', 'Extruded'):
+                        designation_map[sku_key] = desig
+            print(f'  Loaded {len(designation_map)} designations from {dcsv.name}')
         blocked_asins = {r['asin'].strip().upper() for r in blocked_rows}
         rows = load_feed_rows(blocked_asins)
 
@@ -416,11 +460,14 @@ def main():
 
             print(f'  [{n}/{len(rows)}] {sku}', end='  ')
 
-            # Search live Amazon title/bullets/description for cast/extruded,
-            # then fall back to the feed CSV description/bullets if not found.
-            try:
+            # Check designation map first (user-provided CSV wins)
+            designation = designation_map.get(sku)
+
+            # Then search live Amazon title/bullets/description
+            if not designation:
+              try:
                 designation = fetch_cast_extruded_from_listing(tokens, seller, mkt, sku)
-            except Exception as e:
+              except Exception as e:
                 print(f'FETCH ERROR: {e}')
                 results.append({'sku': sku, 'asin': asin, 'status': 'FETCH_ERROR', 'detail': str(e)})
                 error_count += 1
@@ -434,14 +481,6 @@ def main():
                     row.get('description', ''),
                 ] + [row.get(bf, '') for bf in BULLET_FIELDS]))
                 designation = extract_cast_extruded(feed_text)
-
-            # Auto-detect from SKU prefix if not found in listing content
-            if not designation:
-                sku_upper = sku.upper()
-                if sku_upper.startswith('AC'):
-                    designation = 'Cast'
-                elif sku_upper.startswith('NY'):
-                    designation = 'Extruded'
 
             if not designation and args.default_designation:
                 designation = args.default_designation.capitalize()
