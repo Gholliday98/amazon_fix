@@ -32,9 +32,14 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).parent
 
 TITLE_COL_CANDIDATES = [
-    'title', 'item_name', 'product_name', 'product title', 'name',
-    'item name', 'listing title', 'new_title', 'new title', 'description',
-    'item_description', 'product description',
+    'item-name', 'item_name', 'title', 'product_name', 'product title',
+    'product name', 'name', 'item name', 'listing title', 'new_title',
+    'new title', 'description', 'item_description', 'product description',
+]
+
+SKU_COL_CANDIDATES = [
+    'seller-sku', 'seller_sku', 'sku', 'item sku', 'item_sku',
+    'seller sku', 'listing sku',
 ]
 
 
@@ -108,7 +113,7 @@ def main():
     sku_col = args.sku_col or ''
     if not sku_col:
         lower_h = [h.lower() for h in headers]
-        for candidate in ['sku', 'item sku', 'seller sku', 'seller-sku']:
+        for candidate in SKU_COL_CANDIDATES:
             if candidate in lower_h:
                 sku_col = headers[lower_h.index(candidate)]
                 break
