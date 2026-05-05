@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-pc_correct_designation.py — Fix Cast/Extruded designation on specific SKUs.
-
-Fetches the current live title from Amazon, swaps the designation,
-and pushes the corrected title.
+pc_correct_designation.py — Fix or strip Cast/Extruded designation on listings.
 
 Usage:
+    # Correct specific SKUs
     python pc_correct_designation.py --skus AC796_L60,AC796_L72V1 --designation extruded
-    python pc_correct_designation.py --skus AC553_L24Q2 --designation cast
+
+    # Strip the injected designation from ALL OK rows in a rerun results CSV
+    python pc_correct_designation.py --strip-from-results pc_fix_99300_rerun_*.csv
+    python pc_correct_designation.py --strip-from-results pc_fix_99300_rerun_*.csv --dry-run
 """
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -101,6 +103,13 @@ def fetch_listing(tokens, seller, mkt, sku) -> dict:
     return r.json()
 
 
+def strip_designation(title: str) -> str:
+    """Remove 'Cast ' or 'Extruded ' that appears immediately before a material name."""
+    return re.sub(
+        r'\b(?:Cast|Extruded)\s+(?=(?:acrylic|nylon|polycarbonate|polyethylene|abs)\b)',
+        '', title, flags=re.IGNORECASE).strip()
+
+
 def swap_designation(title: str, new_designation: str) -> str:
     """Replace Cast/Extruded in title with new_designation. Returns unchanged title if not found."""
     opposite = 'Extruded' if new_designation.lower() == 'cast' else 'Cast'
@@ -117,22 +126,119 @@ def swap_designation(title: str, new_designation: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser(
-        description='Correct Cast/Extruded designation on specific SKUs.')
-    ap.add_argument('--skus', required=True,
+        description='Correct or strip Cast/Extruded designation on listings.')
+    ap.add_argument('--skus',
                     help='Comma-separated SKUs to correct')
-    ap.add_argument('--designation', required=True, choices=['cast', 'extruded'],
-                    help='Correct designation to apply')
+    ap.add_argument('--designation', choices=['cast', 'extruded'],
+                    help='Correct designation to apply (use with --skus)')
+    ap.add_argument('--strip-from-results', metavar='RESULTS_CSV',
+                    help='Strip injected Cast/Extruded from all OK rows in a rerun results CSV')
     ap.add_argument('--dry-run', action='store_true',
                     help='Show what would change without pushing')
     args = ap.parse_args()
 
-    skus        = [s.strip() for s in args.skus.split(',') if s.strip()]
-    designation = args.designation.capitalize()
+    if not args.skus and not args.strip_from_results:
+        ap.error('Provide either --skus or --strip-from-results')
 
     creds  = load_credentials()
     tokens = TokenManager(creds)
     seller = creds['seller_id']
     mkt    = creds['marketplace_id']
+
+    # ── Strip mode ─────────────────────────────────────────────────────────────
+    if args.strip_from_results:
+        from pathlib import Path
+        results_path = Path(args.strip_from_results)
+        if not results_path.exists():
+            print(f'[ERROR] File not found: {results_path}')
+            sys.exit(1)
+
+        rows = []
+        with open(results_path, newline='', encoding='utf-8', errors='replace') as f:
+            for row in csv.DictReader(f):
+                if row.get('status', '').upper() == 'OK':
+                    rows.append(row)
+
+        print(f'\n  Stripping Cast/Extruded from {len(rows)} listings\n'
+              f'  {"DRY RUN — " if args.dry_run else ""}Source: {results_path.name}\n')
+
+        ok = skipped = errors = 0
+        for n, row in enumerate(rows, 1):
+            sku = row.get('sku', '').strip()
+            print(f'  [{n}/{len(rows)}] {sku}', end='  ')
+
+            data = fetch_listing(tokens, seller, mkt, sku)
+            if not data:
+                print('NOT FOUND')
+                skipped += 1
+                time.sleep(REQUEST_GAP)
+                continue
+
+            product_type = None
+            for s in (data.get('summaries') or []):
+                if s.get('productType'):
+                    product_type = s['productType']
+                    break
+
+            current_title = ''
+            for item in (data.get('attributes', {}).get('item_name') or []):
+                v = (item.get('value') or '').strip()
+                if v:
+                    current_title = v
+                    break
+
+            stripped_title = strip_designation(current_title)
+
+            if stripped_title == current_title:
+                print('no designation found — skipped')
+                skipped += 1
+                time.sleep(REQUEST_GAP)
+                continue
+
+            print(f'{"DRY RUN" if args.dry_run else "stripping"}')
+            print(f'    Before: {current_title[:80]}')
+            print(f'    After : {stripped_title[:80]}')
+
+            if args.dry_run:
+                time.sleep(REQUEST_GAP)
+                continue
+
+            patch = {
+                'productType': product_type,
+                'patches': [{'op': 'replace', 'path': '/attributes/item_name',
+                              'value': [{'value': stripped_title,
+                                         'language_tag': 'en_US',
+                                         'marketplace_id': mkt}]}],
+            }
+            r = sp_request('PATCH',
+                           f'/listings/2021-08-01/items/{seller}/{quote(sku, safe="")}',
+                           tokens, params={'marketplaceIds': mkt}, body=patch)
+            if r.status_code in (200, 202):
+                print(f'    OK')
+                ok += 1
+            else:
+                try:
+                    payload = r.json()
+                    errs = '; '.join(i.get('message', '') for i in (payload.get('issues') or [])
+                                     if i.get('severity', '').upper() == 'ERROR')
+                except ValueError:
+                    errs = r.text[:150]
+                print(f'    FAIL HTTP {r.status_code} — {errs}')
+                errors += 1
+
+            time.sleep(REQUEST_GAP)
+
+        print(f'\n  Stripped OK : {ok}')
+        print(f'  Skipped     : {skipped}')
+        print(f'  Errors      : {errors}\n')
+        return
+
+    # ── Correct specific SKUs mode ─────────────────────────────────────────────
+    if not args.designation:
+        ap.error('--designation is required when using --skus')
+
+    skus        = [s.strip() for s in args.skus.split(',') if s.strip()]
+    designation = args.designation.capitalize()
 
     print(f'\n  Correcting {len(skus)} SKU(s) → {designation}\n')
 
