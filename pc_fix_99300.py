@@ -353,6 +353,8 @@ def main():
     ap.add_argument('--rerun-blocked', metavar='RESULTS_FILE',
                     help='Re-run only BLOCKED rows from a previous results CSV, '
                          'pulling cast/extruded from live Amazon titles')
+    ap.add_argument('--default-designation', metavar='WORD', choices=['cast', 'extruded'],
+                    help='Fallback designation (cast or extruded) when not found in listing')
     ap.add_argument('--dry-run', action='store_true',
                     help='Validate and show changes without pushing to Amazon')
     ap.add_argument('--limit', type=int, metavar='N',
@@ -432,6 +434,9 @@ def main():
                     row.get('description', ''),
                 ] + [row.get(bf, '') for bf in BULLET_FIELDS]))
                 designation = extract_cast_extruded(feed_text)
+
+            if not designation and args.default_designation:
+                designation = args.default_designation.capitalize()
 
             if not designation:
                 print('NEEDS MANUAL — cast/extruded not found in listing or feed')
