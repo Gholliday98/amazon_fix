@@ -180,8 +180,8 @@ def clean_row(row: dict) -> dict:
     return cleaned
 
 
-
-    """Build patches for all text content fields, cleaned through validator."""
+def build_content_patches(row: dict, mkt: str) -> list:
+    """Build patches for all text content fields from an already-cleaned row."""
     p   = []
     g   = lambda k: (row.get(k) or '').strip()
     def clean(v, field):
