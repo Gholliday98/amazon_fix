@@ -434,9 +434,9 @@ def main():
                 designation = extract_cast_extruded(feed_text)
 
             if not designation:
-                print('NEEDS MANUAL — cast/extruded not found in live title')
+                print('NEEDS MANUAL — cast/extruded not found in listing or feed')
                 results.append({'sku': sku, 'asin': asin, 'status': 'NEEDS_MANUAL',
-                                 'detail': f'live title: {(live_title or "")[:100]}'})
+                                 'detail': 'not found in title/bullets/description'})
                 needs_manual += 1
                 time.sleep(REQUEST_GAP)
                 continue
