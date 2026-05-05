@@ -173,6 +173,31 @@ def fetch_current_title(tokens, seller_id, marketplace_id, sku) -> str | None:
     return None
 
 
+def fetch_cast_extruded_from_listing(tokens, seller_id, marketplace_id, sku) -> str | None:
+    """
+    Search the live Amazon title, bullets, and description for 'cast' or 'extruded'.
+    Returns 'Cast', 'Extruded', or None.
+    """
+    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
+                   tokens, params={'marketplaceIds': marketplace_id,
+                                   'includedData': 'attributes'})
+    if not r.ok:
+        return None
+
+    attrs = r.json().get('attributes', {})
+    texts = []
+
+    for item in (attrs.get('item_name') or []):
+        texts.append(item.get('value') or '')
+    for item in (attrs.get('bullet_point') or []):
+        texts.append(item.get('value') or '')
+    for item in (attrs.get('product_description') or []):
+        texts.append(item.get('value') or '')
+
+    combined = ' '.join(texts)
+    return extract_cast_extruded(combined)
+
+
 CAST_EXTRUDED_MATS = ('acrylic', 'nylon')
 
 def extract_cast_extruded(title: str) -> str | None:
@@ -389,9 +414,10 @@ def main():
 
             print(f'  [{n}/{len(rows)}] {sku}', end='  ')
 
-            # Fetch current live title from Amazon to extract cast/extruded
+            # Search live Amazon title/bullets/description for cast/extruded,
+            # then fall back to the feed CSV description/bullets if not found.
             try:
-                live_title = fetch_current_title(tokens, seller, mkt, sku)
+                designation = fetch_cast_extruded_from_listing(tokens, seller, mkt, sku)
             except Exception as e:
                 print(f'FETCH ERROR: {e}')
                 results.append({'sku': sku, 'asin': asin, 'status': 'FETCH_ERROR', 'detail': str(e)})
@@ -399,7 +425,13 @@ def main():
                 time.sleep(REQUEST_GAP)
                 continue
 
-            designation = extract_cast_extruded(live_title or '')
+            if not designation:
+                # Fall back: check feed CSV bullets and description
+                feed_text = ' '.join(filter(None, [
+                    row.get('new_title', ''),
+                    row.get('description', ''),
+                ] + [row.get(bf, '') for bf in BULLET_FIELDS]))
+                designation = extract_cast_extruded(feed_text)
 
             if not designation:
                 print('NEEDS MANUAL — cast/extruded not found in live title')
