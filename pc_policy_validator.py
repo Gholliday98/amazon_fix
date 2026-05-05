@@ -236,7 +236,7 @@ _HARD_PATTERNS = [
      'shipped', 'implied inspection guarantee'),
     (re.compile(r'\btrusted\s+(?:across|by|among|throughout)\b', re.IGNORECASE),
      'established', 'promotional trust claim'),
-    (re.compile(r'\btrusted\b(?=\s+(?:supplier|partner|source|brand|name))', re.IGNORECASE),
+    (re.compile(r'\btrusted\b(?=\s+(?:supplier|partner|source|brand|name|choice|option|solution|product))', re.IGNORECASE),
      'established', 'promotional trust claim'),
     (re.compile(r'\bmachines?\s+cleanly\b', re.IGNORECASE),
      'easy to machine', 'unverifiable machining claim'),
@@ -333,6 +333,8 @@ _HARD_PATTERNS = [
      '', 'unverified ISO certification claim'),
     (re.compile(r'\bISO[\s-]?(?:certified|compliant|approved|listed|standard)\b', re.IGNORECASE),
      '', 'unverified ISO certification claim'),
+    (re.compile(r'\bUL[\s-]?\d+\b', re.IGNORECASE),
+     '', 'unverified UL standard reference'),
     (re.compile(r'\bASTM\b', re.IGNORECASE),
      '', 'unverified ASTM standard reference'),
 
@@ -633,8 +635,8 @@ _SOFT_PATTERNS = [
      'thorough', '"rigorous" unverified claim'),
 
     # "Virtually" as vague intensifier
-    (re.compile(r'\bvirtually\s+(?:zero|no|any|unlimited|indestructible|impervious)\b', re.IGNORECASE),
-     'extremely low', '"virtually" vague claim'),
+    (re.compile(r'\bvirtually\b', re.IGNORECASE),
+     'nearly', '"virtually" vague claim'),
 
     # "Engineered for" — unverified engineering claim
     (re.compile(r'\bengineered\s+for\b', re.IGNORECASE),

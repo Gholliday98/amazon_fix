@@ -442,7 +442,6 @@ def main():
         ok_count    = 0
         skip_count  = 0
         error_count = 0
-        needs_manual = 0
         results     = []
 
         print(f'\n{"═" * 60}')
@@ -460,46 +459,18 @@ def main():
 
             print(f'  [{n}/{len(rows)}] {sku}', end='  ')
 
-            # Check designation map first (user-provided CSV wins)
+            # Only inject designation if explicitly provided in --designations-csv.
+            # Never auto-detect from live listing content or feed text — unreliable.
             designation = designation_map.get(sku)
-
-            # Then search live Amazon title/bullets/description
-            if not designation:
-              try:
-                designation = fetch_cast_extruded_from_listing(tokens, seller, mkt, sku)
-              except Exception as e:
-                print(f'FETCH ERROR: {e}')
-                results.append({'sku': sku, 'asin': asin, 'status': 'FETCH_ERROR', 'detail': str(e)})
-                error_count += 1
-                time.sleep(REQUEST_GAP)
-                continue
-
-            if not designation:
-                # Fall back: check feed CSV bullets and description
-                feed_text = ' '.join(filter(None, [
-                    row.get('new_title', ''),
-                    row.get('description', ''),
-                ] + [row.get(bf, '') for bf in BULLET_FIELDS]))
-                designation = extract_cast_extruded(feed_text)
-
-            if not designation and args.default_designation:
-                designation = args.default_designation.capitalize()
-
-            if not designation:
-                print('NEEDS MANUAL — cast/extruded not found in listing or feed')
-                results.append({'sku': sku, 'asin': asin, 'status': 'NEEDS_MANUAL',
-                                 'detail': 'not found in title/bullets/description'})
-                needs_manual += 1
-                time.sleep(REQUEST_GAP)
-                continue
-
-            # Inject designation into feed title
-            feed_title = (row.get('new_title') or '').strip()
-            if feed_title:
-                row['new_title'] = inject_cast_extruded(feed_title, designation)
+            if designation:
+                feed_title = (row.get('new_title') or '').strip()
+                if feed_title:
+                    row['new_title'] = inject_cast_extruded(feed_title, designation)
 
             if args.dry_run:
-                print(f'WOULD ADD "{designation}" — "{row["new_title"][:80]}"')
+                title_preview = (row.get('new_title') or '')[:80]
+                desig_note = f'"{designation}" injected' if designation else 'no designation'
+                print(f'WOULD PUSH — {desig_note} — "{title_preview}"')
                 time.sleep(REQUEST_GAP)
                 continue
 
@@ -579,7 +550,6 @@ def main():
 
         print(f'\n{"═" * 60}')
         print(f'  Pushed OK    : {ok_count}')
-        print(f'  Needs manual : {needs_manual}')
         print(f'  Skipped      : {skip_count}')
         print(f'  Errors       : {error_count}')
         print(f'  Results file : {rerun_results_file.name}')
