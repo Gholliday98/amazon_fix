@@ -167,7 +167,20 @@ def _txt(v, mkt):
     return [{'value': v, 'language_tag': 'en_US', 'marketplace_id': mkt}]
 
 
-def build_content_patches(row: dict, mkt: str) -> list:
+def clean_row(row: dict) -> dict:
+    """Apply policy validator to all text fields. Returns a cleaned copy of the row."""
+    cleaned = dict(row)
+    for field in ['new_title'] + BULLET_FIELDS + ['description']:
+        val = (cleaned.get(field) or '').strip()
+        if val:
+            cleaned[field], _ = validate_and_fix(val, field)
+    bst = (cleaned.get('backend_search_terms') or '').strip()
+    if bst:
+        cleaned['backend_search_terms'], _ = check_backend_terms(bst)
+    return cleaned
+
+
+
     """Build patches for all text content fields, cleaned through validator."""
     p   = []
     g   = lambda k: (row.get(k) or '').strip()
@@ -347,7 +360,9 @@ def main():
 
         print(f'  [{n}/{len(rows)}] {sku}', end='  ')
 
-        # Preflight check
+        # Clean content first, then preflight the cleaned version
+        row = clean_row(row)
+
         if _PREFLIGHT:
             result = preflight_check(row, fix_truncate=True)
             if result.blocked:
