@@ -376,14 +376,14 @@ def main():
         blocked_rows = []
         with open(results_path, newline='', encoding='utf-8', errors='replace') as f:
             for row in csv.DictReader(f):
-                if row.get('status', '').upper() == 'BLOCKED':
+                if row.get('status', '').upper() in ('BLOCKED', 'NEEDS_MANUAL'):
                     blocked_rows.append(row)
 
         if not blocked_rows:
-            print('[INFO] No BLOCKED rows found in results file.')
+            print('[INFO] No BLOCKED or NEEDS_MANUAL rows found in results file.')
             sys.exit(0)
 
-        print(f'\n  Found {len(blocked_rows)} BLOCKED SKUs — loading feed data...')
+        print(f'\n  Found {len(blocked_rows)} SKUs (BLOCKED/NEEDS_MANUAL) — loading feed data...')
         blocked_asins = {r['asin'].strip().upper() for r in blocked_rows}
         rows = load_feed_rows(blocked_asins)
 
@@ -434,6 +434,14 @@ def main():
                     row.get('description', ''),
                 ] + [row.get(bf, '') for bf in BULLET_FIELDS]))
                 designation = extract_cast_extruded(feed_text)
+
+            # Auto-detect from SKU prefix if not found in listing content
+            if not designation:
+                sku_upper = sku.upper()
+                if sku_upper.startswith('AC'):
+                    designation = 'Cast'
+                elif sku_upper.startswith('NY'):
+                    designation = 'Extruded'
 
             if not designation and args.default_designation:
                 designation = args.default_designation.capitalize()
