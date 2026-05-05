@@ -101,12 +101,11 @@ def preflight_check(row: dict, fix_truncate: bool = False) -> PreflightResult:
 
         title_lower = title.lower()
 
-        # Cast/Extruded required for Acrylic and Nylon
+        # Cast/Extruded recommended for Acrylic and Nylon (warning only — handled separately)
         if any(m in title_lower for m in CAST_EXTRUDED_MATS):
             if 'cast' not in title_lower and 'extruded' not in title_lower:
-                r.add_error(
-                    f'Acrylic/Nylon title missing "Cast" or "Extruded" — '
-                    f'Amazon requires material type designation')
+                r.add_warning(
+                    f'Acrylic/Nylon title missing "Cast" or "Extruded" — add via pc_correct_designation.py')
 
         # Product form (sheet/rod/tube) required in title
         if not any(f in title_lower for f in PRODUCT_FORMS):
