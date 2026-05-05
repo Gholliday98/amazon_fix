@@ -168,17 +168,32 @@ def clean_title(text: str) -> tuple[str, list[str]]:
 
 def clean_bullet_aggressive(text: str) -> tuple[str, list[str]]:
     """
-    Drop the entire bullet if it contains any HARD violation.
-    Soft violations are fixed inline.
-    Returns (cleaned_or_empty, violations).
+    Drop individual sentences within the bullet that contain HARD violations.
+    Soft violations in kept sentences are fixed inline.
+    Returns (cleaned_text, violations). Empty string means the whole bullet was dropped.
     """
     if not text.strip():
         return '', []
-    _, viols = validate_and_fix(text, 'bullet')
-    if any(v.startswith('[HARD]') for v in viols):
-        return '', viols  # drop whole bullet
-    clean, soft = validate_and_fix(text, 'bullet')
-    return clean, soft
+
+    all_viols   = []
+    parts       = re.split(r'(?<=[.!?])\s+(?=[A-Z""])', text.strip())
+    clean_parts = []
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        _, viols = validate_and_fix(part, 'bullet')
+        hard = [v for v in viols if v.startswith('[HARD]')]
+        if hard:
+            all_viols.extend(hard)
+            continue  # drop this sentence only
+        clean_part, soft = validate_and_fix(part, 'bullet')
+        all_viols.extend(soft)
+        if clean_part.strip():
+            clean_parts.append(clean_part.strip())
+
+    return ' '.join(clean_parts), all_viols
 
 
 def clean_description_aggressive(text: str) -> tuple[str, list[str]]:
