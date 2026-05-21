@@ -223,9 +223,9 @@ LEGACY_REQUIRED_FIELDS = {
 
 
 def parse_tsv(raw: str) -> list[dict]:
-    # utf-8-sig strips the BOM that Amazon prepends to the first column name
-    reader = csv.DictReader(io.StringIO(raw.lstrip('﻿')), delimiter='\t')
-    return [{k.strip(): v.strip() for k, v in row.items()} for row in reader]
+    reader = csv.DictReader(io.StringIO(raw), delimiter='\t')
+    # Strip BOM and whitespace from every key so column lookups always work
+    return [{k.strip().lstrip('﻿'): v.strip() for k, v in row.items()} for row in reader]
 
 
 def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
@@ -283,12 +283,16 @@ def write_csv(rows: list[dict], output_path: Path) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def run_report(tokens: TokenManager, marketplace_id: str,
-               report_type: str, poll_secs: int, is_fyp: bool) -> list[dict]:
+               report_type: str, poll_secs: int, is_fyp: bool,
+               raw_save_path: Path | None = None) -> list[dict]:
     report_id   = create_report(tokens, marketplace_id, report_type)
     time.sleep(REQUEST_GAP)
     doc_id      = poll_report(tokens, report_id, poll_secs)
     time.sleep(REQUEST_GAP)
     raw         = download_report(tokens, doc_id)
+    if raw_save_path:
+        raw_save_path.write_text(raw, encoding='utf-8')
+        print(f'         Raw report saved to: {raw_save_path}')
     print('[STEP 4] Parsing report...')
     report_rows = parse_tsv(raw)
     print(f'         {len(report_rows)} row(s) found in report.')
@@ -303,6 +307,8 @@ def main() -> None:
                         help='Path for the output CSV (default: suppressed_listings_<timestamp>.csv)')
     parser.add_argument('--poll-interval', type=int, default=DEFAULT_POLL_SECS,
                         help=f'Seconds between report-status polls (default: {DEFAULT_POLL_SECS})')
+    parser.add_argument('--from-file',
+                        help='Skip Amazon pull and reprocess a previously saved raw TSV file')
     args = parser.parse_args()
 
     output_path = Path(args.output)
@@ -312,22 +318,32 @@ def main() -> None:
     print(f'  {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
     print('=' * 60)
 
-    creds  = load_credentials()
-    tokens = TokenManager(creds)
+    raw_path = SCRIPT_DIR / f'suppressed_raw_{RUN_ID}.tsv'
 
     try:
-        # Try the current FYP report first; fall back to legacy if it errors
-        try:
-            output_rows = run_report(tokens, creds['marketplace_id'],
-                                     REPORT_PRIMARY, args.poll_interval, is_fyp=True)
-        except RuntimeError as e:
-            print(f'\n  [WARN] FYP report failed ({e})')
-            print(f'  [WARN] Falling back to {REPORT_FALLBACK}...\n')
-            output_rows = run_report(tokens, creds['marketplace_id'],
-                                     REPORT_FALLBACK, args.poll_interval, is_fyp=False)
+        if args.from_file:
+            print(f'[STEP 1-3] Reading from local file: {args.from_file}')
+            raw = Path(args.from_file).read_text(encoding='utf-8')
+            print('[STEP 4] Parsing report...')
+            report_rows = parse_tsv(raw)
+            print(f'         {len(report_rows)} row(s) found in report.')
+            output_rows = build_output_rows_fyp(report_rows)
+        else:
+            creds  = load_credentials()
+            tokens = TokenManager(creds)
+            try:
+                output_rows = run_report(tokens, creds['marketplace_id'],
+                                         REPORT_PRIMARY, args.poll_interval,
+                                         is_fyp=True, raw_save_path=raw_path)
+            except RuntimeError as e:
+                print(f'\n  [WARN] FYP report failed ({e})')
+                print(f'  [WARN] Falling back to {REPORT_FALLBACK}...\n')
+                output_rows = run_report(tokens, creds['marketplace_id'],
+                                         REPORT_FALLBACK, args.poll_interval,
+                                         is_fyp=False, raw_save_path=raw_path)
 
         if not output_rows:
-            print('\n[INFO] No search-suppressed listings found. Your catalog looks clean!')
+            print('\n[INFO] No matching listings found.')
             return
 
         write_csv(output_rows, output_path)
