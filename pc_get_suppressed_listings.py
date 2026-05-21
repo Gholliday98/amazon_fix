@@ -223,27 +223,22 @@ LEGACY_REQUIRED_FIELDS = {
 
 
 def parse_tsv(raw: str) -> list[dict]:
-    reader = csv.DictReader(io.StringIO(raw), delimiter='\t')
+    # utf-8-sig strips the BOM that Amazon prepends to the first column name
+    reader = csv.DictReader(io.StringIO(raw.lstrip('﻿')), delimiter='\t')
     return [{k.strip(): v.strip() for k, v in row.items()} for row in reader]
 
 
 def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
-    # Print column headers and a sample row so we can see the report structure
-    if report_rows:
-        print(f'         Columns: {list(report_rows[0].keys())}')
-        print(f'         Sample row: {report_rows[0]}')
-
     out = []
     for row in report_rows:
-        status = row.get('status', row.get('listing-status', '')).lower()
-        if not any(kw in status for kw in ('suppressed', 'search suppress')):
+        if row.get('Status', '').strip().lower() != 'search suppressed':
             continue
-        sku    = row.get('seller-sku', row.get('sku', '')).strip()
-        asin   = row.get('asin', row.get('asin1', '')).strip()
-        title  = row.get('item-name', row.get('product-name', '')).strip()
-        errors = row.get('issue', row.get('suppression-reason',
-                 row.get('error-message', 'Search Suppressed — see Seller Central'))).strip()
-        out.append({'sku': sku, 'asin': asin, 'title': title, 'errors': errors})
+        out.append({
+            'sku':    row.get('SKU', '').strip(),
+            'asin':   row.get('ASIN', '').strip(),
+            'title':  row.get('Product name', '').strip(),
+            'errors': row.get('Issue Description', row.get('Reason', '')).strip(),
+        })
     return out
 
 
