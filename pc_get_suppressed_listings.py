@@ -228,10 +228,10 @@ def parse_tsv(raw: str) -> list[dict]:
 
 
 def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
-    # Print unique status values on first run so we can verify the filter
-    statuses = set(row.get('status', row.get('listing-status', 'NO_STATUS_COL')).strip()
-                   for row in report_rows)
-    print(f'         Status values found in report: {statuses}')
+    # Print column headers and a sample row so we can see the report structure
+    if report_rows:
+        print(f'         Columns: {list(report_rows[0].keys())}')
+        print(f'         Sample row: {report_rows[0]}')
 
     out = []
     for row in report_rows:
