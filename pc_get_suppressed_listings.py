@@ -228,10 +228,15 @@ def parse_tsv(raw: str) -> list[dict]:
 
 
 def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
+    # Print unique status values on first run so we can verify the filter
+    statuses = set(row.get('status', row.get('listing-status', 'NO_STATUS_COL')).strip()
+                   for row in report_rows)
+    print(f'         Status values found in report: {statuses}')
+
     out = []
     for row in report_rows:
         status = row.get('status', row.get('listing-status', '')).lower()
-        if FYP_SUPPRESSED_STATUS not in status:
+        if not any(kw in status for kw in ('suppressed', 'search suppress')):
             continue
         sku    = row.get('seller-sku', row.get('sku', '')).strip()
         asin   = row.get('asin', row.get('asin1', '')).strip()
