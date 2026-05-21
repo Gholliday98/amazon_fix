@@ -2,8 +2,8 @@
 """
 pc_get_suppressed_listings.py — Pull all search-suppressed listings from Amazon via SP-API.
 
-Uses the Reports API to request a GET_MERCHANT_LISTINGS_SUPPRESSED_DATA report,
-polls until it's ready, downloads it, and writes a CSV of SKUs + error types.
+Tries GET_MERCHANTS_LISTINGS_FYP_REPORT first (Amazon's current recommended report),
+then falls back to GET_MERCHANT_LISTINGS_SUPPRESSED_DATA if that fails.
 
 Output CSV columns:
     sku, asin, title, errors
@@ -41,18 +41,22 @@ except ImportError:
     sys.exit(1)
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-SCRIPT_DIR   = Path(__file__).parent
-RUN_ID       = datetime.now().strftime('%Y%m%d_%H%M%S')
-DEFAULT_OUT  = SCRIPT_DIR / f'suppressed_listings_{RUN_ID}.csv'
+SCRIPT_DIR  = Path(__file__).parent
+RUN_ID      = datetime.now().strftime('%Y%m%d_%H%M%S')
+DEFAULT_OUT = SCRIPT_DIR / f'suppressed_listings_{RUN_ID}.csv'
 
 # ─── SP-API constants ─────────────────────────────────────────────────────────
 LWA_ENDPOINT      = 'https://api.amazon.com/auth/o2/token'
 SP_API_BASE       = 'https://sellingpartnerapi-na.amazon.com'
-REPORT_TYPE       = 'GET_MERCHANT_LISTINGS_SUPPRESSED_DATA'
 MAX_RETRIES       = 3
-REQUEST_GAP       = 0.5    # seconds between API calls
-DEFAULT_POLL_SECS = 30     # seconds between report-status polls
-MAX_POLL_MINUTES  = 30     # give up after this long
+REQUEST_GAP       = 0.5
+DEFAULT_POLL_SECS = 30
+MAX_POLL_MINUTES  = 30
+
+# Primary: Amazon's current "Fix Your Products" report (replaces the old defect reports).
+# Fallback: older suppressed-only report that may still be active on some accounts.
+REPORT_PRIMARY  = 'GET_MERCHANTS_LISTINGS_FYP_REPORT'
+REPORT_FALLBACK = 'GET_MERCHANT_LISTINGS_SUPPRESSED_DATA'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -71,7 +75,6 @@ def load_credentials() -> dict:
     missing = [k for k in required if not c[k]]
     if missing:
         print(f'\n[ERROR] Missing env vars: {", ".join(missing)}')
-        print('        Set them before running:')
         for k in missing:
             print(f'        export {k.upper()}="..."')
         sys.exit(1)
@@ -143,14 +146,12 @@ def sp_request(method: str, path: str, tokens: TokenManager,
 # Reports API flow
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def create_report(tokens: TokenManager, marketplace_id: str) -> str:
-    """Request the suppressed listings report and return its reportId."""
-    print(f'[STEP 1] Requesting {REPORT_TYPE} report...')
-    body = {
-        'reportType':     REPORT_TYPE,
+def create_report(tokens: TokenManager, marketplace_id: str, report_type: str) -> str:
+    print(f'[STEP 1] Requesting {report_type} report...')
+    r = sp_request('POST', '/reports/2021-06-30/reports', tokens, body={
+        'reportType':     report_type,
         'marketplaceIds': [marketplace_id],
-    }
-    r = sp_request('POST', '/reports/2021-06-30/reports', tokens, body=body)
+    })
     if not r.ok:
         raise RuntimeError(f'Failed to create report ({r.status_code}): {r.text[:400]}')
     report_id = r.json().get('reportId', '')
@@ -161,7 +162,6 @@ def create_report(tokens: TokenManager, marketplace_id: str) -> str:
 
 
 def poll_report(tokens: TokenManager, report_id: str, poll_secs: int) -> str:
-    """Poll until the report is DONE and return the reportDocumentId."""
     print(f'[STEP 2] Waiting for report to complete (checking every {poll_secs}s)...')
     deadline = time.time() + MAX_POLL_MINUTES * 60
     while time.time() < deadline:
@@ -180,77 +180,81 @@ def poll_report(tokens: TokenManager, report_id: str, poll_secs: int) -> str:
             return doc_id
         if status in ('CANCELLED', 'FATAL'):
             raise RuntimeError(f'Report ended with status {status}: {data}')
-        # IN_QUEUE or IN_PROGRESS — keep polling
     raise RuntimeError(f'Report not ready after {MAX_POLL_MINUTES} minutes.')
 
 
 def download_report(tokens: TokenManager, doc_id: str) -> str:
-    """Fetch the document URL and download the raw report content as a string."""
     print(f'[STEP 3] Fetching download URL for document {doc_id}...')
     r = sp_request('GET', f'/reports/2021-06-30/documents/{doc_id}', tokens)
     if not r.ok:
         raise RuntimeError(f'Failed to get document URL ({r.status_code}): {r.text[:400]}')
-    doc_info      = r.json()
-    download_url  = doc_info.get('url', '')
-    compression   = doc_info.get('compressionAlgorithm', '')
+    doc_info     = r.json()
+    download_url = doc_info.get('url', '')
+    compression  = doc_info.get('compressionAlgorithm', '')
     if not download_url:
         raise RuntimeError(f'No download URL in document response: {doc_info}')
 
-    print(f'         Downloading report content...')
+    print('         Downloading report content...')
     resp = requests.get(download_url, timeout=120)
     resp.raise_for_status()
 
-    if compression == 'GZIP':
-        raw = gzip.decompress(resp.content).decode('utf-8', errors='replace')
-    else:
-        raw = resp.content.decode('utf-8', errors='replace')
+    raw = gzip.decompress(resp.content).decode('utf-8', errors='replace') \
+          if compression == 'GZIP' \
+          else resp.content.decode('utf-8', errors='replace')
 
     print(f'         Downloaded {len(raw):,} characters.')
     return raw
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Parse the suppressed listings TSV
+# Parse report — handles both FYP and legacy suppressed-data formats
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Amazon's suppressed listings report has no dedicated "errors" column.
-# We infer errors from which required fields are blank in the report.
-REQUIRED_FIELDS = {
+# FYP report: has an explicit status column — we only keep Search Suppressed rows.
+FYP_SUPPRESSED_STATUS = 'search suppressed'
+
+# Legacy report: no status column; infer errors from blank required fields.
+LEGACY_REQUIRED_FIELDS = {
     'image-url': 'Missing main image',
     'item-name': 'Missing title',
     'price':     'Missing price',
     'quantity':  'Missing quantity',
 }
 
-def infer_errors(row: dict) -> str:
-    errors = []
-    for field, label in REQUIRED_FIELDS.items():
-        val = row.get(field, '').strip()
-        if not val or val == '0':
-            errors.append(label)
-    return '; '.join(errors) if errors else 'Check Seller Central for details'
 
-
-def parse_report(raw: str) -> list[dict]:
+def parse_tsv(raw: str) -> list[dict]:
     reader = csv.DictReader(io.StringIO(raw), delimiter='\t')
-    rows   = []
-    for row in reader:
-        row = {k.strip(): v.strip() for k, v in row.items()}
-        rows.append(row)
-    return rows
+    return [{k.strip(): v.strip() for k, v in row.items()} for row in reader]
 
 
-def build_output_rows(report_rows: list[dict]) -> list[dict]:
+def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
+    out = []
+    for row in report_rows:
+        status = row.get('status', row.get('listing-status', '')).lower()
+        if FYP_SUPPRESSED_STATUS not in status:
+            continue
+        sku    = row.get('seller-sku', row.get('sku', '')).strip()
+        asin   = row.get('asin', row.get('asin1', '')).strip()
+        title  = row.get('item-name', row.get('product-name', '')).strip()
+        errors = row.get('issue', row.get('suppression-reason',
+                 row.get('error-message', 'Search Suppressed — see Seller Central'))).strip()
+        out.append({'sku': sku, 'asin': asin, 'title': title, 'errors': errors})
+    return out
+
+
+def build_output_rows_legacy(report_rows: list[dict]) -> list[dict]:
     out = []
     for row in report_rows:
         sku   = row.get('seller-sku', row.get('sku', '')).strip()
         asin  = (row.get('asin1', '') or row.get('asin2', '') or row.get('asin3', '')).strip()
         title = row.get('item-name', '').strip()
+        errs  = [label for field, label in LEGACY_REQUIRED_FIELDS.items()
+                 if not row.get(field, '').strip() or row.get(field, '') == '0']
         out.append({
             'sku':    sku,
             'asin':   asin,
             'title':  title,
-            'errors': infer_errors(row),
+            'errors': '; '.join(errs) if errs else 'Check Seller Central for details',
         })
     return out
 
@@ -260,6 +264,7 @@ def build_output_rows(report_rows: list[dict]) -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 FIELDNAMES = ['sku', 'asin', 'title', 'errors']
+
 
 def write_csv(rows: list[dict], output_path: Path) -> None:
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
@@ -273,6 +278,20 @@ def write_csv(rows: list[dict], output_path: Path) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def run_report(tokens: TokenManager, marketplace_id: str,
+               report_type: str, poll_secs: int, is_fyp: bool) -> list[dict]:
+    report_id   = create_report(tokens, marketplace_id, report_type)
+    time.sleep(REQUEST_GAP)
+    doc_id      = poll_report(tokens, report_id, poll_secs)
+    time.sleep(REQUEST_GAP)
+    raw         = download_report(tokens, doc_id)
+    print('[STEP 4] Parsing report...')
+    report_rows = parse_tsv(raw)
+    print(f'         {len(report_rows)} row(s) found in report.')
+    return build_output_rows_fyp(report_rows) if is_fyp \
+           else build_output_rows_legacy(report_rows)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -294,27 +313,22 @@ def main() -> None:
     tokens = TokenManager(creds)
 
     try:
-        report_id = create_report(tokens, creds['marketplace_id'])
-        time.sleep(REQUEST_GAP)
-
-        doc_id = poll_report(tokens, report_id, args.poll_interval)
-        time.sleep(REQUEST_GAP)
-
-        raw = download_report(tokens, doc_id)
-
-        print('[STEP 4] Parsing report...')
-        report_rows = parse_report(raw)
-        print(f'         {len(report_rows)} row(s) found in report.')
-
-        output_rows = build_output_rows(report_rows)
+        # Try the current FYP report first; fall back to legacy if it errors
+        try:
+            output_rows = run_report(tokens, creds['marketplace_id'],
+                                     REPORT_PRIMARY, args.poll_interval, is_fyp=True)
+        except RuntimeError as e:
+            print(f'\n  [WARN] FYP report failed ({e})')
+            print(f'  [WARN] Falling back to {REPORT_FALLBACK}...\n')
+            output_rows = run_report(tokens, creds['marketplace_id'],
+                                     REPORT_FALLBACK, args.poll_interval, is_fyp=False)
 
         if not output_rows:
-            print('\n[INFO] No suppressed listings found. Your catalog looks clean!')
+            print('\n[INFO] No search-suppressed listings found. Your catalog looks clean!')
             return
 
         write_csv(output_rows, output_path)
 
-        # Quick summary by error type
         tally: dict[str, int] = {}
         for row in output_rows:
             for e in row['errors'].split('; '):
