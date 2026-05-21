@@ -233,10 +233,13 @@ def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
     for row in report_rows:
         if row.get('Status', '').strip().lower() != 'search suppressed':
             continue
+        title = row.get('Product name', '').strip()
+        if 'cutting board' not in title.lower():
+            continue
         out.append({
             'sku':    row.get('SKU', '').strip(),
             'asin':   row.get('ASIN', '').strip(),
-            'title':  row.get('Product name', '').strip(),
+            'title':  title,
             'errors': row.get('Issue Description', row.get('Reason', '')).strip(),
         })
     return out
