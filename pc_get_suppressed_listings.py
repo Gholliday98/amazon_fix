@@ -3,10 +3,10 @@
 pc_get_suppressed_listings.py — Pull all search-suppressed listings from Amazon via SP-API.
 
 Uses the Reports API to request a GET_MERCHANT_LISTINGS_SUPPRESSED_DATA report,
-polls until it's ready, downloads it, and writes a clean CSV for review/fixing.
+polls until it's ready, downloads it, and writes a CSV of SKUs + error types.
 
 Output CSV columns:
-    sku, asin, title, suppression_reason, image_url, price, quantity, open_date
+    sku, asin, title, errors
 
 Usage
 -----
@@ -213,31 +213,28 @@ def download_report(tokens: TokenManager, doc_id: str) -> str:
 # Parse the suppressed listings TSV
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Amazon's suppressed listings report has no dedicated "suppression_reason" column.
-# Instead, it omits required attributes for suppressed listings. We infer the reason
-# from the columns that are blank.
+# Amazon's suppressed listings report has no dedicated "errors" column.
+# We infer errors from which required fields are blank in the report.
 REQUIRED_FIELDS = {
-    'image-url':   'Missing main image',
-    'item-name':   'Missing title',
-    'price':       'Missing price',
-    'quantity':    'Missing quantity',
+    'image-url': 'Missing main image',
+    'item-name': 'Missing title',
+    'price':     'Missing price',
+    'quantity':  'Missing quantity',
 }
 
-def infer_suppression_reason(row: dict) -> str:
-    reasons = []
+def infer_errors(row: dict) -> str:
+    errors = []
     for field, label in REQUIRED_FIELDS.items():
         val = row.get(field, '').strip()
         if not val or val == '0':
-            reasons.append(label)
-    return '; '.join(reasons) if reasons else 'See Seller Central for details'
+            errors.append(label)
+    return '; '.join(errors) if errors else 'Check Seller Central for details'
 
 
 def parse_report(raw: str) -> list[dict]:
-    """Parse tab-delimited report into a list of cleaned row dicts."""
     reader = csv.DictReader(io.StringIO(raw), delimiter='\t')
     rows   = []
     for row in reader:
-        # Normalise key whitespace (Amazon sometimes pads column names)
         row = {k.strip(): v.strip() for k, v in row.items()}
         rows.append(row)
     return rows
@@ -249,21 +246,11 @@ def build_output_rows(report_rows: list[dict]) -> list[dict]:
         sku   = row.get('seller-sku', row.get('sku', '')).strip()
         asin  = (row.get('asin1', '') or row.get('asin2', '') or row.get('asin3', '')).strip()
         title = row.get('item-name', '').strip()
-        img   = row.get('image-url', '').strip()
-        price = row.get('price', '').strip()
-        qty   = row.get('quantity', '').strip()
-        date  = row.get('open-date', '').strip()
-        reason = infer_suppression_reason(row)
-
         out.append({
-            'sku':                sku,
-            'asin':               asin,
-            'title':              title,
-            'suppression_reason': reason,
-            'image_url':          img,
-            'price':              price,
-            'quantity':           qty,
-            'open_date':          date,
+            'sku':    sku,
+            'asin':   asin,
+            'title':  title,
+            'errors': infer_errors(row),
         })
     return out
 
@@ -272,8 +259,7 @@ def build_output_rows(report_rows: list[dict]) -> list[dict]:
 # Write output CSV
 # ═══════════════════════════════════════════════════════════════════════════════
 
-FIELDNAMES = ['sku', 'asin', 'title', 'suppression_reason',
-              'image_url', 'price', 'quantity', 'open_date']
+FIELDNAMES = ['sku', 'asin', 'title', 'errors']
 
 def write_csv(rows: list[dict], output_path: Path) -> None:
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
@@ -328,15 +314,15 @@ def main() -> None:
 
         write_csv(output_rows, output_path)
 
-        # Quick summary by suppression reason
-        reasons: dict[str, int] = {}
+        # Quick summary by error type
+        tally: dict[str, int] = {}
         for row in output_rows:
-            for r in row['suppression_reason'].split('; '):
-                reasons[r] = reasons.get(r, 0) + 1
+            for e in row['errors'].split('; '):
+                tally[e] = tally.get(e, 0) + 1
 
-        print('\n  Suppression reason breakdown:')
-        for reason, count in sorted(reasons.items(), key=lambda x: -x[1]):
-            print(f'    {count:>4}  {reason}')
+        print('\n  Error breakdown:')
+        for error, count in sorted(tally.items(), key=lambda x: -x[1]):
+            print(f'    {count:>4}  {error}')
 
     except KeyboardInterrupt:
         print('\n[INTERRUPTED]')
