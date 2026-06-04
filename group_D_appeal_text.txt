@@ -1,0 +1,87 @@
+GROUP D — APPEAL / CASE MATERIALS
+Restricted Products (Pesticide Policy) — Industrial Plastics Flagged in Error
+208 ASINs | Generated 2026-06-04
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 1 — MESSAGE FOR INDIVIDUAL "SUBMIT APPEAL" BUTTONS
+(Paste this same text into each ASIN's appeal box. Test 3-5 first.)
+═══════════════════════════════════════════════════════════════════════════════
+
+This product is a raw industrial plastic material (polypropylene / acetal /
+nylon / UHMW / polycarbonate sheet or rod) sold for fabrication and industrial
+use. It is NOT a pesticide or pesticide device under FIFRA and makes no
+pesticidal claims.
+
+The listing contains no claims that the product inhibits, destroys, repels,
+mitigates, or prevents bacteria, mold, mildew, viruses, fungi, odors, or any
+pest or microorganism. References to the material's properties (chemical
+resistance, FDA food-contact compliance, temperature range, tensile strength,
+machinability) describe inherent physical characteristics of the polymer, not
+antimicrobial or pesticidal protection.
+
+Because the product makes no pesticidal claims, it does not require an EPA
+Registration Number, EPA Establishment Number, or treated-article documentation.
+We respectfully request reinstatement of this listing. We have reviewed the
+title, description, bullet points, images, and packaging and confirm no
+pesticidal or antimicrobial language is present.
+
+Reference: Pesticides and Pesticide Devices policy
+(https://sellercentral.amazon.com/gp/help/external/202115120). This listing
+falls outside that policy's scope.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 2 — CONSOLIDATED ACCOUNT HEALTH SUPPORT (AHS) CASE
+(Use ONLY if the individual appeals get auto-rejected. Open one case, paste
+this, and attach group_D_asins.txt.)
+═══════════════════════════════════════════════════════════════════════════════
+
+Subject: Bulk reinstatement request — 208 industrial plastic listings
+incorrectly flagged under Restricted Products (Pesticide) policy
+
+Hello Account Health Support,
+
+We are requesting bulk reinstatement of 208 listings (ASIN list attached) that
+were removed under the Restricted Products – Pesticide policy for alleged
+"pesticidal claims." Every one of these listings is a raw industrial plastic
+material — polypropylene, acetal, nylon, UHMW, and polycarbonate sheets and
+rods — sold for fabrication, machining, and industrial applications.
+
+None of these products is a pesticide or pesticide device, and none of the
+listings make any pesticidal or antimicrobial claim. They contain no statements
+about inhibiting, destroying, repelling, or mitigating bacteria, mold, mildew,
+viruses, fungi, pests, or odors.
+
+Importantly, Amazon's own listing review on these items has already confirmed
+this. The automated review note returned on our polypropylene listings states
+verbatim that "the product description and bullet points focus on the
+material's industrial properties" and "does not contain claims about removing,
+inhibiting, destroying, repelling, trapping, or eliminating pests, bacteria,
+mold, mildew, viruses, or odors," and that "if this product does not make any
+pesticidal claims ... then it should not require EPA pesticide registration or
+establishment numbers." Despite this finding, the listings were removed.
+
+Because these are a single product family flagged by the same automated rule
+for the same incorrect reason, we are requesting that they be reviewed and
+reinstated together rather than as 208 separate appeals.
+
+We have audited every listing's title, description, bullet points, images, and
+packaging and confirm no pesticidal or antimicrobial language is present. We are
+happy to make any specific wording adjustments if a particular phrase is
+identified as the trigger.
+
+Thank you for your help resolving this systemic mis-flagging.
+
+Plastic-Craft Products
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 3 — TIPS
+═══════════════════════════════════════════════════════════════════════════════
+- Attach group_D_asins.txt to the AHS case (208 ASINs, one per line).
+- If AHS asks for the "trigger phrase," the likely culprit is generic wording
+  the bot misreads; offer to remove any specific term they name.
+- Quote Amazon's own review note (Part 2, paragraph 4) — it is your strongest
+  evidence because their system contradicted its own enforcement.
+- Keep Groups A/B/C (cutting boards) OUT of this case — those DO need the
+  "food grade" / bacteria language removed first, so they're a separate workflow.
