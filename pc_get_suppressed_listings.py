@@ -228,18 +228,25 @@ def parse_tsv(raw: str) -> list[dict]:
     return [{k.strip().lstrip('﻿'): v.strip() for k, v in row.items()} for row in reader]
 
 
+FIELDNAMES = ['status', 'sku', 'asin', 'title', 'violation_type', 'issue_description']
+
+
 def build_output_rows_fyp(report_rows: list[dict]) -> list[dict]:
     out = []
     for row in report_rows:
-        if row.get('Status', '').strip().lower() != 'search suppressed':
+        status = row.get('Status', '').strip()
+        if not status:
             continue
-        title = row.get('Product name', '').strip()
         out.append({
-            'sku':    row.get('SKU', '').strip(),
-            'asin':   row.get('ASIN', '').strip(),
-            'title':  title,
-            'errors': row.get('Issue Description', row.get('Reason', '')).strip(),
+            'status':            status,
+            'sku':               row.get('SKU', '').strip(),
+            'asin':              row.get('ASIN', '').strip(),
+            'title':             row.get('Product name', '').strip(),
+            'violation_type':    row.get('Reason', '').strip(),
+            'issue_description': row.get('Issue Description', '').strip(),
         })
+    # Sort by status then violation type so it's easy to work through in groups
+    out.sort(key=lambda r: (r['status'], r['violation_type']))
     return out
 
 
@@ -263,9 +270,6 @@ def build_output_rows_legacy(report_rows: list[dict]) -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Write output CSV
 # ═══════════════════════════════════════════════════════════════════════════════
-
-FIELDNAMES = ['sku', 'asin', 'title', 'errors']
-
 
 def write_csv(rows: list[dict], output_path: Path) -> None:
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
@@ -346,14 +350,12 @@ def main() -> None:
 
         write_csv(output_rows, output_path)
 
-        tally: dict[str, int] = {}
-        for row in output_rows:
-            for e in row['errors'].split('; '):
-                tally[e] = tally.get(e, 0) + 1
-
-        print('\n  Error breakdown:')
-        for error, count in sorted(tally.items(), key=lambda x: -x[1]):
-            print(f'    {count:>4}  {error}')
+        # Summary grouped by status + violation type
+        from collections import Counter
+        tally = Counter((r['status'], r['violation_type']) for r in output_rows)
+        print('\n  Breakdown by status / violation type:')
+        for (status, vtype), count in sorted(tally.items(), key=lambda x: (-x[1], x[0])):
+            print(f'    {count:>4}  [{status}]  {vtype or "(no reason listed)"}')
 
     except KeyboardInterrupt:
         print('\n[INTERRUPTED]')
