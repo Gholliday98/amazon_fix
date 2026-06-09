@@ -57,6 +57,7 @@ import re
 import sys
 import time
 from datetime import datetime
+from urllib.parse import quote
 from pathlib import Path
 
 try:
@@ -70,6 +71,12 @@ try:
     _VALIDATOR_AVAILABLE = True
 except ImportError:
     _VALIDATOR_AVAILABLE = False
+
+try:
+    from pc_preflight import preflight_check
+    _PREFLIGHT_AVAILABLE = True
+except ImportError:
+    _PREFLIGHT_AVAILABLE = False
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR   = Path(__file__).parent
@@ -166,7 +173,7 @@ def sp_request(method: str, path: str, tokens: TokenManager,
 def get_listing_product_type(tokens: TokenManager, seller_id: str,
                               marketplace_id: str, sku: str) -> str | None:
     """Return productType for an existing SKU, or None if not found."""
-    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
                    tokens, params={'marketplaceIds': marketplace_id})
     if r.status_code == 404:
         return None
@@ -182,11 +189,71 @@ def get_listing_product_type(tokens: TokenManager, seller_id: str,
     return None
 
 
+# Cache: product_type → set of valid attribute names
+_SCHEMA_CACHE: dict = {}
+
+def get_valid_attrs(tokens: TokenManager, marketplace_id: str,
+                    product_type: str) -> set | None:
+    """
+    Fetch the Product Type Definition schema from Amazon and return the set
+    of attribute names that are valid for this product type.
+    Returns None if the call fails (caller falls back to static skip list).
+    Results are cached — one API call per product type per run.
+    """
+    if product_type in _SCHEMA_CACHE:
+        return _SCHEMA_CACHE[product_type]
+
+    r = sp_request('GET', f'/definitions/2020-09-01/productTypes/{product_type}',
+                   tokens, params={
+                       'marketplaceIds': marketplace_id,
+                       'requirements': 'LISTING',
+                   })
+    if not r.ok:
+        _SCHEMA_CACHE[product_type] = None
+        return None
+
+    try:
+        schema = r.json().get('schema', {})
+        props  = schema.get('properties', {})
+        valid  = set(props.keys()) if props else None
+        _SCHEMA_CACHE[product_type] = valid
+        if valid:
+            print(f'    [SCHEMA] {product_type}: {len(valid)} valid attributes cached')
+        return valid
+    except Exception:
+        _SCHEMA_CACHE[product_type] = None
+        return None
+
+
+def filter_patches(patches: list, product_type: str,
+                   tokens: TokenManager | None = None,
+                   marketplace_id: str = '') -> list:
+    """
+    Remove patches for attributes that don't belong to this product type.
+    Priority: live schema from Amazon > static skip list > dynamic learning.
+    """
+    # Try live schema first
+    if tokens and marketplace_id:
+        valid = get_valid_attrs(tokens, marketplace_id, product_type)
+        if valid:
+            filtered = [p for p in patches if p['path'].split('/')[-1] in valid]
+            # Still apply dynamic skips on top (catches anything schema misses)
+            dyn = _dynamic_skip.get(product_type, set())
+            return [p for p in filtered if p['path'].split('/')[-1] not in dyn]
+
+    # Fallback: static + dynamic skip lists
+    skip = set(_SKIP_ATTRS_BY_TYPE.get(product_type, set()))
+    skip |= _dynamic_skip.get(product_type, set())
+    if not skip:
+        return patches
+    return [p for p in patches if p['path'].split('/')[-1] not in skip]
+
+
 def patch_listing(tokens: TokenManager, seller_id: str, marketplace_id: str,
                    sku: str, product_type: str, patches: list) -> tuple[int, dict]:
     """PATCH a listing.  Returns (status_code, response_json)."""
     body = {'productType': product_type, 'patches': patches}
-    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
                    tokens, params={'marketplaceIds': marketplace_id}, body=body)
     try:
         payload = r.json()
@@ -285,14 +352,6 @@ def _learn_from_warnings(product_type: str, warn_issues: list) -> None:
         _dynamic_skip.setdefault(product_type, set()).add(attr)
 
 
-def filter_patches(patches: list, product_type: str) -> list:
-    skip = set(_SKIP_ATTRS_BY_TYPE.get(product_type, set()))
-    skip |= _dynamic_skip.get(product_type, set())
-    if not skip:
-        return patches
-    return [p for p in patches if p['path'].split('/')[-1] not in skip]
-
-
 def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
@@ -355,9 +414,11 @@ def build_patches(row: dict, mkt: str) -> list:
         p.append({'op': 'replace', 'path': '/attributes/style',
                   'value': _txt(clean(g('style'), 'style'), mkt)})
 
-    if clean(g('size_description'), 'size_description'):
+    size_val = clean(g('size_description'), 'size_description')
+    if size_val:
+        size_val = size_val[:50].rsplit(' ', 1)[0] if len(size_val) > 50 else size_val
         p.append({'op': 'replace', 'path': '/attributes/size',
-                  'value': _txt(clean(g('size_description'), 'size_description'), mkt)})
+                  'value': _txt(size_val, mkt)})
 
     if clean(g('item_form'), 'item_form'):
         p.append({'op': 'replace', 'path': '/attributes/item_form',
@@ -440,6 +501,19 @@ def build_patches(row: dict, mkt: str) -> list:
 # Input + CLI
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def load_done_skus() -> set:
+    """Return the set of SKUs already successfully pushed in any previous v2 results file."""
+    done = set()
+    for f in glob.glob(str(SCRIPT_DIR / 'pc_push_v2_results_*.csv')):
+        with open(f, newline='', encoding='utf-8', errors='replace') as fh:
+            for row in csv.DictReader(fh):
+                if (row.get('status', '') or '').strip() == 'success':
+                    sku = (row.get('sku', '') or '').strip()
+                    if sku:
+                        done.add(sku)
+    return done
+
+
 def find_csv() -> Path:
     matches = glob.glob(str(SCRIPT_DIR / 'pc_amazon_feed_v4_*.csv'))
     if not matches:
@@ -470,6 +544,8 @@ def parse_args():
                     help='Cap to first N listings')
     ap.add_argument('--input', metavar='FILE',
                     help='Exact CSV file to use (default: most-recently-modified pc_amazon_feed_v4_*.csv)')
+    ap.add_argument('--resume', action='store_true',
+                    help='Skip SKUs already marked success in any previous pc_push_v2_results_*.csv')
     return ap.parse_args()
 
 
@@ -509,7 +585,15 @@ def main():
     if not rows:
         print('\n  No eligible rows (need non-empty sku + description).')
         return
-    print(f'\n  Loaded {len(rows)} listing(s)\n')
+
+    if args.resume:
+        done_skus = load_done_skus()
+        before = len(rows)
+        rows = [r for r in rows if (r.get('sku', '') or '').strip() not in done_skus]
+        skipped_done = before - len(rows)
+        print(f'\n  Loaded {before} listing(s) — skipping {skipped_done} already done → {len(rows)} remaining\n')
+    else:
+        print(f'\n  Loaded {len(rows)} listing(s)\n')
 
     # Results CSV
     fh = open(RESULTS_FILE, 'w', newline='', encoding='utf-8')
@@ -544,6 +628,19 @@ def main():
             asin = (row.get('asin', '') or '').strip()
 
             print(f'  [{n}/{len(rows)}] {sku}')
+
+            # ── Preflight check ───────────────────────────────────────────────
+            if _PREFLIGHT_AVAILABLE:
+                pf = preflight_check(row, fix_truncate=True)
+                for w in pf.warnings:
+                    print(f'    [PREFLIGHT WARN] {w}')
+                if pf.blocked:
+                    for e in pf.errors:
+                        print(f'    [PREFLIGHT BLOCK] {e}')
+                    record(sku, asin, '', 0, 'error', 'PreflightFailed',
+                           ' | '.join(pf.errors))
+                    stats['error'] += 1
+                    continue
 
             # ── Build patches ─────────────────────────────────────────────────
             patches = build_patches(row, mkt)
@@ -581,7 +678,7 @@ def main():
                 time.sleep(REQUEST_GAP)
                 continue
 
-            patches = filter_patches(patches, product_type)
+            patches = filter_patches(patches, product_type, tokens, mkt)
             print(f'    productType: {product_type}  →  PATCH {len(patches)} field(s)')
             time.sleep(REQUEST_GAP)
 

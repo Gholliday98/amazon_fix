@@ -43,10 +43,12 @@ import csv
 import glob
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     import requests
@@ -59,6 +61,12 @@ try:
     _VALIDATOR_AVAILABLE = True
 except ImportError:
     _VALIDATOR_AVAILABLE = False
+
+try:
+    from pc_preflight import preflight_check
+    _PREFLIGHT_AVAILABLE = True
+except ImportError:
+    _PREFLIGHT_AVAILABLE = False
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR   = Path(__file__).parent
@@ -155,7 +163,7 @@ def sp_request(method: str, path: str, tokens: TokenManager,
 def get_listing_product_type(tokens: TokenManager, seller_id: str,
                               marketplace_id: str, sku: str) -> str | None:
     """Return productType for an existing SKU, or None if not found."""
-    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+    r = sp_request('GET', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
                    tokens, params={'marketplaceIds': marketplace_id})
     if r.status_code == 404:
         return None
@@ -176,7 +184,7 @@ def patch_listing(tokens: TokenManager, seller_id: str, marketplace_id: str,
                    sku: str, product_type: str, patches: list) -> tuple[int, dict]:
     """PATCH a listing.  Returns (status_code, response_json)."""
     body = {'productType': product_type, 'patches': patches}
-    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{sku}',
+    r = sp_request('PATCH', f'/listings/2021-08-01/items/{seller_id}/{quote(sku, safe="")}',
                    tokens, params={'marketplaceIds': marketplace_id}, body=body)
     try:
         payload = r.json()
@@ -220,13 +228,116 @@ def _dims(l: str, w: str, h: str, mkt: str):
              'marketplace_id': mkt}]
 
 
+# ─── SKU Dimension Parser ──────────────────────────────────────────────────────
+# Plastic-Craft SKU format: [MATERIAL_CODE]_W{width}L{length}[V{vendor}][Q{qty}]
+# Examples:
+#   PP91_W24L36V10  → width=24", length=36"  (V = vendor code, ignored)
+#   AC485_L24Q6     → length=24", quantity=6
+# The optimizer's all([t,w,l]) bug drops dims when thickness is missing.
+# We rebuild W/L from the SKU so every title is unique, stopping ASIN rematch.
+
+def _parse_sku_dims(sku: str) -> dict:
+    """Parse W, L, Q dimension codes from a Plastic-Craft SKU string.
+    V codes are vendor identifiers and are intentionally ignored."""
+    dims = {}
+    u = sku.upper()
+    for code, key, lo, hi in [
+        ('W', 'width',  1, 200),
+        ('L', 'length', 1, 200),
+    ]:
+        m = re.search(rf'(?:^|[^A-Z]){code}(\d+(?:\.\d+)?)(?=[^0-9]|$)', u)
+        if m:
+            try:
+                v = float(m.group(1))
+                if lo < v < hi:
+                    dims[key] = v
+            except ValueError:
+                pass
+    m = re.search(r'(?:^|[^A-Z])Q(\d+)(?=[^0-9]|$)', u)
+    if m:
+        try:
+            q = int(m.group(1))
+            if 1 <= q <= 999:
+                dims['quantity'] = q
+        except ValueError:
+            pass
+    return dims
+
+
+_COMMON_FRACS = {
+    0.0625: '1/16', 0.125: '1/8', 0.1875: '3/16', 0.25: '1/4',
+    0.3125: '5/16', 0.375: '3/8', 0.4375: '7/16', 0.5: '1/2',
+    0.5625: '9/16', 0.625: '5/8', 0.6875: '11/16', 0.75: '3/4',
+    0.8125: '13/16', 0.875: '7/8', 0.9375: '15/16',
+}
+
+def _fmt_dim(v: float) -> str:
+    """Format a dimension value: whole number → '24"', common fraction → '1/4"', else decimal."""
+    if v == int(v):
+        return f'{int(v)}"'
+    for dec, frac in _COMMON_FRACS.items():
+        if abs(v - dec) < 0.001:
+            return f'{frac}"'
+    return f'{v:.4g}"'
+
+
+_DIM_PRESENT_RE = re.compile(
+    r'\d+["\']?\s*(?:thick|w\b|l\b|wide|long)\b'
+    r'|\d+["\']?\s*[wx]\s*\d+',
+    re.IGNORECASE
+)
+
+def _title_has_dims(title: str) -> bool:
+    return bool(_DIM_PRESENT_RE.search(title))
+
+
+def _inject_sku_dims(title: str, sku: str) -> tuple:
+    """
+    Append W/L/thickness from SKU codes if the title is missing them.
+    Returns (new_title, was_modified).
+    Only activates when SKU contains W or L codes.
+    """
+    dims = _parse_sku_dims(sku)
+    if not dims.get('width') and not dims.get('length'):
+        return title, False
+    if _title_has_dims(title):
+        return title, False
+
+    w = dims.get('width')
+    l = dims.get('length')
+    q = dims.get('quantity')
+
+    parts = []
+    if w and l:
+        parts.append(f'{_fmt_dim(w)} W x {_fmt_dim(l)} L')
+    elif w:
+        parts.append(f'{_fmt_dim(w)} W')
+    elif l:
+        parts.append(f'{_fmt_dim(l)} L')
+    if q and q > 1:
+        parts.append(f'Pack of {q}')
+
+    new_title = title.rstrip(', ') + ', ' + ', '.join(parts)
+    return new_title, True
+
+
 def build_patches(row: dict, mkt: str) -> list:
     p = []
     g = lambda k: (row.get(k, '') or '').strip()
+    sku = (row.get('sku', '') or '').strip()
 
     if g('new_title'):
+        title, _ = _inject_sku_dims(g('new_title'), sku)
+        # Warn if Acrylic or Nylon title is missing Cast/Extruded designation
+        title_lower = title.lower()
+        if any(m in title_lower for m in ('acrylic', 'nylon')):
+            if 'cast' not in title_lower and 'extruded' not in title_lower:
+                print(f'    [WARN] {sku}: Acrylic/Nylon title missing Cast or Extruded — review manually')
+        # Warn if rod/sheet/tube not in title
+        if not any(f in title_lower for f in ('sheet', 'rod', 'tube', 'bar', 'block', 'panel')):
+            print(f'    [WARN] {sku}: title missing product form (sheet/rod/tube) — review manually')
         p.append({'op': 'replace', 'path': '/attributes/item_name',
-                  'value': _txt(g('new_title'), mkt)})
+                  'value': _txt(title, mkt)})
 
     bullets = []
     for i in range(1, 6):
@@ -362,7 +473,7 @@ def main():
     tokens = TokenManager(creds)
     mkt    = creds['marketplace_id']
     seller = creds['seller_id']
-    stats  = {'success': 0, 'error': 0, 'skipped': 0, 'not_found': 0}
+    stats  = {'success': 0, 'error': 0, 'skipped': 0, 'not_found': 0, 'dim_repaired': 0}
 
     try:
         for n, row in enumerate(rows, 1):
@@ -370,7 +481,30 @@ def main():
             asin  = (row.get('asin', '') or '').strip()
             title = (row.get('new_title', '') or '').strip()
 
-            print(f'  [{n}/{len(rows)}] {sku}')
+            # Dimension repair preview (same logic as build_patches)
+            original_title = title
+            title, dim_repaired = _inject_sku_dims(title, sku)
+
+            if dim_repaired:
+                stats['dim_repaired'] += 1
+                print(f'  [{n}/{len(rows)}] {sku}  [DIM REPAIRED]')
+                print(f'    WAS: {original_title}')
+                print(f'    NOW: {title}')
+            else:
+                print(f'  [{n}/{len(rows)}] {sku}')
+
+            # ── Preflight check ───────────────────────────────────────────────
+            if _PREFLIGHT_AVAILABLE:
+                pf = preflight_check(row, fix_truncate=True)
+                for w in pf.warnings:
+                    print(f'    [PREFLIGHT WARN] {w}')
+                if pf.blocked:
+                    for e in pf.errors:
+                        print(f'    [PREFLIGHT BLOCK] {e}')
+                    record(sku, asin, title, 0, 'error', 'PreflightFailed',
+                           ' | '.join(pf.errors))
+                    stats['error'] += 1
+                    continue
 
             # ── Build patches ─────────────────────────────────────────────────
             patches = build_patches(row, mkt)
@@ -468,10 +602,12 @@ def main():
 
     print('\n' + '═' * 60)
     print('  DONE')
-    print(f'  Success   : {stats["success"]}')
-    print(f'  Errors    : {stats["error"]}')
-    print(f'  Not found : {stats["not_found"]}')
-    print(f'  Skipped   : {stats["skipped"]}')
+    print(f'  Success       : {stats["success"]}')
+    print(f'  Errors        : {stats["error"]}')
+    print(f'  Not found     : {stats["not_found"]}')
+    print(f'  Skipped       : {stats["skipped"]}')
+    if stats['dim_repaired']:
+        print(f'  Dims repaired : {stats["dim_repaired"]}  ← titles fixed from SKU codes')
     print(f'\n  Results → {RESULTS_FILE.name}')
     print('═' * 60 + '\n')
 

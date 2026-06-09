@@ -40,6 +40,10 @@ import time
 import os
 import sys
 import math
+import threading
+import webbrowser
+import http.server
+import socketserver
 from datetime import datetime
 from pathlib import Path
 
@@ -69,7 +73,7 @@ from pc_self_heal import SelfHealingEngine, DimensionSanityChecker
 # ============================================================
 
 # Input: your All Listings Report from Amazon Seller Central
-INPUT_FILE = str(SCRIPT_DIR / 'All+Listings+Report_04-17-2026.txt')
+INPUT_FILE = str(SCRIPT_DIR / '1775844707902_All_Listings_Report_02-02-2026.txt')
 
 # Output directory — defaults to same folder as script
 LOG_DIR = str(SCRIPT_DIR)
@@ -78,8 +82,10 @@ RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_FILE = str(SCRIPT_DIR / f'pc_amazon_feed_v4_{RUN_ID}.csv')
 ERROR_LOG = str(SCRIPT_DIR / f'pc_errors_v4_{RUN_ID}.csv')
 CHECKPOINT_FILE = str(SCRIPT_DIR / 'pc_checkpoint_v4.json')
+REVIEW_QUEUE_FILE = str(SCRIPT_DIR / 'pc_image_review_queue.json')
+REVIEW_RESULTS_FILE = str(SCRIPT_DIR / 'pc_image_review_results.json')
 
-TEST_MODE = False
+TEST_MODE = True
 TEST_LIMIT = 8
 
 logger, jlog, RUN_ID = setup_logger('pc_optimizer_v4', LOG_DIR)
@@ -112,6 +118,7 @@ THIRD_PARTY_BRANDS = {
     'craftics': 'Craftics',
     'ips': 'IPS',
     'scigrip': 'SciGrip',
+    'acrifix': 'Acrifix',
     'novus': 'Novus',
     'brillianize': 'Brillianize',
     'dykem': 'Dykem',
@@ -217,11 +224,11 @@ RUFUS_QA = {
         },
         {
             'q': 'How does the clarity of this acrylic compare to glass?',
-            'a': '92% light transmission — actually clearer than standard glass, with significantly better impact resistance. Ideal for display cases, picture frames, sneeze guards, and anywhere optical clarity matters.'
+            'a': '92% light transmission — actually clearer than standard glass, with significantly better impact resistance. Ideal for display cases, picture frames, sneeze guards, and anywhere clarity and light transmission matter.'
         },
         {
             'q': 'What is the difference between cast and extruded acrylic?',
-            'a': 'Cast acrylic offers better optical clarity, tighter thickness tolerances, and superior chemical resistance — ideal for display and precision fabrication. Extruded acrylic is more consistent in thickness and easier to thermoform, making it the preferred choice for forming and bending applications.'
+            'a': 'Cast acrylic offers better visual clarity, tighter thickness tolerances, and superior chemical resistance — ideal for display and precision fabrication. Extruded acrylic is more consistent in thickness and easier to thermoform, making it the preferred choice for forming and bending applications.'
         },
         {
             'q': 'Can acrylic be bonded or glued?',
@@ -247,13 +254,13 @@ RUFUS_QA = {
         },
         {
             'q': 'How does ABS compare to polycarbonate for machine guards?',
-            'a': 'Polycarbonate offers significantly higher impact resistance (250x stronger than glass vs. ABS). ABS is preferred when machinability, paintability, and cost are priorities. PC is the choice when optical clarity and shatter resistance are critical.'
+            'a': 'Polycarbonate offers significantly higher impact resistance (250x stronger than glass vs. ABS). ABS is preferred when machinability, paintability, and cost are priorities. PC is the choice when visual clarity and shatter resistance are critical.'
         },
     ],
     'hdpe': [
         {
-            'q': 'Is this HDPE food safe and FDA approved?',
-            'a': 'Yes — compliant with FDA 21 CFR and NSF standards for direct food contact. USDA approved. Safe for cutting boards, food prep surfaces, food processing equipment, and any direct food contact application.'
+            'q': 'Is HDPE used in food processing environments?',
+            'a': 'HDPE is widely used in food processing environments due to its non-porous surface, moisture resistance, and ease of cleaning. Commonly used for cutting boards, food prep surfaces, conveyor components, and food processing equipment.'
         },
         {
             'q': 'Will HDPE warp, absorb odors, or stain?',
@@ -279,7 +286,7 @@ RUFUS_QA = {
         },
         {
             'q': 'Will polycarbonate work for a machine guard or safety shield?',
-            'a': 'Yes — polycarbonate is the industry standard for machine guards, safety shields, and protective barriers precisely because of its combination of optical clarity and near-unbreakable toughness. Rated UL 94 V-2 flame resistant.'
+            'a': 'Yes — polycarbonate is the industry standard for machine guards, safety shields, and protective barriers precisely because of its combination of visual clarity and near-unbreakable toughness. Rated UL 94 V-2 flame resistant.'
         },
         {
             'q': 'Is polycarbonate UV stable for greenhouse or outdoor use?',
@@ -312,8 +319,8 @@ RUFUS_QA = {
             'a': 'Cast nylon offers better crystallinity, higher tensile strength, and improved chemical resistance — preferred for large structural and wear parts. Extruded nylon provides tighter dimensional tolerances and more consistent properties for precision machined components.'
         },
         {
-            'q': 'Is nylon food safe?',
-            'a': 'FDA-compliant grades of nylon are available and widely used in food processing equipment, conveyor components, and food contact applications. Confirm the specific grade\'s FDA compliance for your application before use.'
+            'q': 'Is nylon used in food processing equipment?',
+            'a': 'Nylon is widely used in food processing equipment, conveyor components, and industrial machinery. Its low moisture absorption, self-lubricating properties, and machinability make it a popular choice for precision food processing components.'
         },
     ],
     'uhmw': [
@@ -322,8 +329,8 @@ RUFUS_QA = {
             'a': 'UHMW has the highest abrasion resistance of any thermoplastic and no break impact strength — designed to outlast steel in many wear applications. Conveyor liners, wear strips, and chute liners made from UHMW regularly last years in demanding industrial environments.'
         },
         {
-            'q': 'Is UHMW food safe for conveyor and food processing applications?',
-            'a': 'Yes — FDA 21 CFR, NSF, and USDA approved. Widely used in food processing conveyor systems, star wheels, guide rails, and food contact wear components. Non-porous surface resists bacterial growth.'
+            'q': 'Is UHMW used in food processing applications?',
+            'a': 'UHMW is widely used in food processing conveyor systems, star wheels, guide rails, and wear components. Its non-porous surface is easy to clean and maintain, making it a common choice for food processing equipment fabrication.'
         },
         {
             'q': 'Can UHMW be bonded or welded?',
@@ -362,8 +369,8 @@ RUFUS_QA = {
     ],
     'polypropylene': [
         {
-            'q': 'Is polypropylene food safe?',
-            'a': 'Yes — FDA 21 CFR and NSF compliant. Polypropylene is one of the most widely used food-safe plastics for food processing equipment, containers, and food contact surfaces. Resists most cleaning chemicals and sanitizers.'
+            'q': 'Is polypropylene used in food processing equipment?',
+            'a': 'Polypropylene is widely used in food processing equipment, containers, and industrial applications. It resists moisture, most cleaning chemicals, and has a non-porous surface that is easy to clean — making it a common material choice for food processing fabrication.'
         },
         {
             'q': 'What makes polypropylene unique compared to other plastics?',
@@ -379,7 +386,7 @@ RUFUS_QA = {
         },
         {
             'q': 'What is the temperature limit for polypropylene?',
-            'a': 'Polypropylene handles continuous service from -20°F to 200°F — higher than HDPE and suitable for hot-fill food applications and steam sterilization at moderate temperatures.'
+            'a': 'Polypropylene handles continuous service from -20°F to 200°F — higher than HDPE and suitable for hot-fill applications and high-temperature industrial environments.'
         },
     ],
     'peek': [
@@ -388,8 +395,8 @@ RUFUS_QA = {
             'a': 'Yes — PEEK maintains structural integrity at continuous service temperatures up to 480°F (250°C), with a heat deflection temperature of 600°F. One of the highest performance thermoplastics available for demanding high-temperature applications.'
         },
         {
-            'q': 'Is PEEK biocompatible for medical device applications?',
-            'a': 'Yes — PEEK is USP Class VI and FDA compliant, making it widely used in medical devices, surgical instruments, and implantable components. Its biocompatibility and radiolucency make it the preferred polymer for medical and dental applications.'
+            'q': 'Is PEEK used in medical device applications?',
+            'a': 'PEEK is widely used in medical device manufacturing due to its high strength, chemical resistance, and ability to withstand repeated high-temperature processing. Its radiolucency and dimensional stability make it a preferred engineering polymer for precision medical and dental components.'
         },
         {
             'q': 'Can PEEK replace metal in my application?',
@@ -407,7 +414,7 @@ RUFUS_QA = {
     'delrin': [
         {
             'q': 'Will Delrin hold tight tolerances after machining?',
-            'a': 'Yes — Delrin (acetal/POM) has less than 0.2% moisture absorption, delivering exceptional dimensional stability before and after machining. Holds tolerances tighter than nylon in humid environments, making it the preferred choice for precision gears, cams, and mechanical components.'
+            'a': 'Yes — Delrin (acetal/POM) has less than 0.2% moisture absorption, delivering high dimensional stability before and after machining. Holds tolerances tighter than nylon in humid environments, making it the preferred choice for precision gears, cams, and mechanical components.'
         },
         {
             'q': 'How does Delrin compare to nylon for gears?',
@@ -419,7 +426,7 @@ RUFUS_QA = {
         },
         {
             'q': 'Can Delrin be used in food processing applications?',
-            'a': 'FDA-compliant grades of Delrin are available and widely used in food processing equipment, conveyor components, and food contact applications. Confirm the specific grade\'s FDA compliance for your application.'
+            'a': 'Delrin is widely used in food processing equipment, conveyor components, and precision machinery parts. Its low friction, high stiffness, and moisture resistance make it a preferred choice for gears, bearings, and wear components in demanding industrial environments.'
         },
         {
             'q': 'What is Delrin used for?',
@@ -462,8 +469,8 @@ RUFUS_QA = {
             'a': 'Yes — polyethylene welds well with hot gas and extrusion welding. Machines cleanly with standard tools. Does not bond reliably with solvent cement — use mechanical fasteners or welding for assemblies.'
         },
         {
-            'q': 'Is polyethylene food safe?',
-            'a': 'FDA-compliant grades of polyethylene are widely used in food processing, packaging, and food contact applications. Verify the specific grade meets FDA 21 CFR requirements for your application.'
+            'q': 'Is polyethylene used in food processing and packaging?',
+            'a': 'Polyethylene is one of the most widely used plastics in food processing and packaging environments. Its non-porous surface, moisture resistance, and chemical resistance make it a practical choice for food processing equipment components and industrial containers.'
         },
         {
             'q': 'How does polyethylene compare to HDPE?',
@@ -473,7 +480,7 @@ RUFUS_QA = {
     'noryl': [
         {
             'q': 'What is Noryl plastic and what is it used for?',
-            'a': 'Noryl (modified PPO/PPE) is an engineering thermoplastic known for its exceptional dimensional stability, low moisture absorption, and excellent electrical insulating properties. Used in electrical housings, automotive components, and medical devices.'
+            'a': 'Noryl (modified PPO/PPE) is an engineering thermoplastic known for its high dimensional stability, low moisture absorption (under 0.1%), and strong electrical insulating properties. Used in electrical housings, automotive components, and medical devices.'
         },
         {
             'q': 'Does Noryl absorb moisture or change dimensions?',
@@ -499,11 +506,11 @@ RUFUS_QA = {
         },
         {
             'q': 'How does PETG compare to acrylic?',
-            'a': 'PETG is significantly tougher than acrylic (much higher impact resistance) and less brittle, making it less likely to crack during fabrication or in service. Acrylic offers slightly better optical clarity. PETG is the preferred choice when toughness matters as much as clarity.'
+            'a': 'PETG is significantly tougher than acrylic (much higher impact resistance) and less brittle, making it less likely to crack during fabrication or in service. Acrylic offers slightly better visual clarity. PETG is the preferred choice when toughness matters as much as clarity.'
         },
         {
-            'q': 'Is PETG food safe?',
-            'a': 'Yes — PETG is FDA compliant for food contact applications. Widely used in food packaging, beverage containers, and food service displays.'
+            'q': 'Is PETG used in food packaging and displays?',
+            'a': 'PETG is widely used in food packaging, beverage containers, and point-of-sale displays. Its excellent clarity, impact resistance, and ease of thermoforming make it a popular choice for packaging and display fabrication.'
         },
         {
             'q': 'Can PETG be cut and fabricated?',
@@ -532,8 +539,8 @@ RUFUS_QA = {
             'a': 'Polystyrene is brittle compared to acrylic or polycarbonate and not suitable for impact-demanding applications. It has limited chemical resistance and can craze or crack with exposure to certain solvents. Best suited for light-duty indoor applications.'
         },
         {
-            'q': 'Is polystyrene food safe?',
-            'a': 'FDA-compliant grades of polystyrene are used in food packaging and food service applications. However, polystyrene is not recommended for hot food contact or microwave use in most applications.'
+            'q': 'Is polystyrene used in food packaging applications?',
+            'a': 'Polystyrene is commonly used in food packaging and food service disposables. It is not recommended for hot food or microwave applications due to its lower heat resistance compared to other engineering plastics.'
         },
     ],
     'polyurethane': [
@@ -591,7 +598,7 @@ RUFUS_QA = {
         },
         {
             'q': 'Is Ultem used in medical devices?',
-            'a': 'Yes — Ultem is USP Class VI compliant and withstands steam autoclave sterilization, making it widely used in medical instruments, surgical trays, and reusable medical device components that require repeated sterilization cycles.'
+            'a': 'Ultem is widely used in medical device manufacturing due to its high heat resistance, chemical resistance, and ability to withstand repeated high-temperature processing cycles. Commonly used for surgical trays, instrument handles, and precision medical components requiring dimensional stability.'
         },
         {
             'q': 'Can Ultem be machined?',
@@ -955,7 +962,7 @@ MATERIAL_DATA = {
         'key_stat': 'FDA and NSF compliant — safe for direct food contact',
         'compliance': ['FDA 21 CFR', 'NSF Compliant', 'ASTM D4976', 'USDA Approved'],
         'pain_points': [
-            'Is this actually food safe and NSF compliant?',
+            'Will this work for food processing equipment fabrication?',
             'Will this warp, absorb odors, or stain?',
             'Can I use this in outdoor or marine environments?',
         ],
@@ -1014,7 +1021,7 @@ MATERIAL_DATA = {
         'compliance': ['FDA 21 CFR', 'NSF Compliant', 'USDA Approved', 'ASTM D4020'],
         'pain_points': [
             'How long will this last in my high-wear application?',
-            'Is this food safe for my conveyor or food processing line?',
+            'Will this work for conveyor and food processing equipment?',
             'Can I weld or bond UHMW to other surfaces?',
         ],
         'intended_use_by_shape': {
@@ -1051,7 +1058,7 @@ MATERIAL_DATA = {
         'key_stat': 'Unique living hinge capability — flexes millions of times without fatigue',
         'compliance': ['FDA 21 CFR', 'NSF Compliant', 'ASTM D4101'],
         'pain_points': [
-            'Is this food safe and FDA compliant?',
+            'Will this work for food processing equipment fabrication?',
             'Can this be used for living hinges?',
             'How chemical resistant is polypropylene?',
         ],
@@ -1069,7 +1076,7 @@ MATERIAL_DATA = {
         'compliance': ['ASTM D6262', 'USP Class VI', 'FDA Compliant', 'RoHS Compliant'],
         'pain_points': [
             'Will this hold up at continuous high temperatures?',
-            'Is this biocompatible for my medical device application?',
+            'Will this work for medical device component manufacturing?',
             'Can PEEK replace metal in my application?',
         ],
         'intended_use_by_shape': {
@@ -1381,79 +1388,20 @@ def extract_dimensions(title):
     if had_mm:
         dims['mm_conversions'] = conversions
 
-    # num pattern handles: 1/4, 1-1/2, 0.25, .236, 12, 3/16
-    num = r'(\d*\.?\d+(?:-\d+/\d+|\.\d+|/\d+)?)'
+    num = r'(\d+(?:-\d+/\d+|\.\d+|/\d+)?)'
 
     try:
         if ptype in ('sheet', 'cutting_board', 'cutting_board_oem'):
-            # Thickness — handles: 1/4" Thick, 1/4" T, 0.25 Thick
-            thick = re.search(
-                rf'{num}["\s]*(?:thick(?:ness)?|t\b)',
-                title_normalized, re.IGNORECASE
-            )
-
-            # Handle L/W prefix format: L11.8125" x W72" or W12" x L24"
-            lw_prefix = re.search(
-                rf'[LW]({num.strip("()")})["\s]*[xX×]\s*[LW]({num.strip("()")})',
-                title_normalized, re.IGNORECASE
-            )
-
-            # Width x Length — handles:
-            # 12" W x 24" L, 12" Wide x 24" Long, 12" x 24"
-            wl = re.search(
-                rf'{num}["\s]*(?:w(?:ide|idth)?\b)?\s*[xX×]\s*{num}["\s]*(?:l(?:ong|ength)?\b)?',
-                title_normalized, re.IGNORECASE
-            )
-            # Three dimensions: Thick x Wide x Long
-            twl = re.search(
-                rf'{num}["\s]*[xX×]\s*{num}["\s]*[xX×]\s*{num}',
-                title_normalized, re.IGNORECASE
-            )
+            # Thickness — allow optional parenthetical between value and keyword,
+            # e.g. "0.1181" (1/8") Thick" which results from MM conversion of "3MM (1/8") Thick"
+            thick = re.search(rf'{num}["\s]*(?:\([^)]*\)\s*)?(?:thick|t\b)', title_normalized, re.IGNORECASE)
+            # Width x Length
+            wl = re.search(rf'{num}["\s]*w?\s*x\s*{num}["\s]*l?', title_normalized, re.IGNORECASE)
 
             if thick:
                 val = parse_fraction(thick.group(1))
-                if val and 0 < val < 20:
-                    dims['thickness'] = round(val, 4)
-
-            if lw_prefix:
-                # L11.8125" x W72" format — figure out which is length vs width
-                v1 = parse_fraction(lw_prefix.group(1))
-                v2 = parse_fraction(lw_prefix.group(2))
-                if v1 and v2 and 0 < v1 < 300 and 0 < v2 < 300:
-                    # Larger = length, smaller = width
-                    dims['width'] = round(min(v1, v2), 4)
-                    dims['length'] = round(max(v1, v2), 4)
-                # If no explicit thickness found, first number might be thickness
-                # in format: 1/4" x 12" x 24" — first is thickness
-                pass
-
-            if twl:
-                # Three dimension format: thickness x width x length
-                v1 = parse_fraction(twl.group(1))
-                v2 = parse_fraction(twl.group(2))
-                v3 = parse_fraction(twl.group(3))
-                if v1 and v2 and v3:
-                    # Smallest is thickness, other two are width/length
-                    vals = sorted([
-                        round(v1, 4), round(v2, 4), round(v3, 4)
-                    ])
-                    if 0 < vals[0] < 20 and 0 < vals[1] < 200 and 0 < vals[2] < 200:
-                        dims['thickness'] = vals[0]
-                        dims['width'] = vals[1]
-                        dims['length'] = vals[2]
-            elif wl:
-                w = parse_fraction(wl.group(1))
-                l = parse_fraction(wl.group(2))
-                if w and l:
-                    if not dims.get('thickness') and w < 5:
-                        # Likely thickness x width or thickness x length
-                        pass
-                    if 0 < w < 200 and 0 < l < 200:
-                        dims['width'] = round(w, 4)
-                        dims['length'] = round(l, 4)
-
-            # If we have thickness and width/length from wl but no 3-dim match
-            if dims.get('thickness') and not dims.get('width') and wl:
+                if val and 0 < val < 20: dims['thickness'] = round(val, 4)
+            if wl:
                 w = parse_fraction(wl.group(1))
                 l = parse_fraction(wl.group(2))
                 if w and l and 0 < w < 200 and 0 < l < 200:
@@ -1461,65 +1409,30 @@ def extract_dimensions(title):
                     dims['length'] = round(l, 4)
 
         elif ptype == 'rod':
-            # Length — handles: 48" Length, 48" L, 48" long
-            len_m = re.search(
-                rf'{num}["\s]*(?:length|long|l\b)',
-                title_normalized, re.IGNORECASE
-            )
-            # Diameter/OD — handles: 1/4" Diameter, 1/4" OD, 2-1/2" Thick
-            # NOTE: In your catalog, rods use "Thick" to mean diameter/OD
-            dia_m = re.search(
-                rf'{num}["\s]*(?:diameter|dia(?:meter)?\b|od\b|thick(?:ness)?\b)',
-                title_normalized, re.IGNORECASE
-            )
-
+            len_m = re.search(rf'{num}["\s]*(?:length|l\b)', title_normalized, re.IGNORECASE)
+            dia_m = re.search(rf'{num}["\s]*(?:diameter|od\b)', title_normalized, re.IGNORECASE)
             if len_m:
                 val = parse_fraction(len_m.group(1))
                 if val and 0 < val < 300: dims['length'] = round(val, 4)
             if dia_m:
                 val = parse_fraction(dia_m.group(1))
                 if val and 0 < val < 24: dims['od'] = round(val, 4)
-
-            # Fallback: any two numbers where smaller = OD, larger = length
+            # Fallback: length x diameter pattern
             if not dims.get('length') or not dims.get('od'):
-                pat = re.search(
-                    rf'{num}["\s]*(?:diameter|dia|od|thick)?\s*[xX×]\s*{num}',
-                    title_normalized, re.IGNORECASE
-                )
+                pat = re.search(rf'{num}["\s]*(?:length|l)?\s*x\s*{num}["\s]*(?:diameter|od)?',
+                                title_normalized, re.IGNORECASE)
                 if pat:
-                    v1 = parse_fraction(pat.group(1))
-                    v2 = parse_fraction(pat.group(2))
-                    if v1 and v2:
-                        if v1 < v2:
-                            if 'od' not in dims and 0 < v1 < 24: dims['od'] = round(v1, 4)
-                            if 'length' not in dims and 0 < v2 < 300: dims['length'] = round(v2, 4)
-                        else:
-                            if 'od' not in dims and 0 < v2 < 24: dims['od'] = round(v2, 4)
-                            if 'length' not in dims and 0 < v1 < 300: dims['length'] = round(v1, 4)
-
-            # Last resort — if only OD found, look for any larger number as length
-            if dims.get('od') and not dims.get('length'):
-                all_nums = re.findall(rf'{num}', title_normalized)
-                for n_str in all_nums:
-                    n = parse_fraction(n_str)
-                    if n and n > dims.get('od', 0) and n < 300:
-                        dims['length'] = round(n, 4)
-                        break
+                    if 'length' not in dims:
+                        v = parse_fraction(pat.group(1))
+                        if v and 0 < v < 300: dims['length'] = round(v, 4)
+                    if 'od' not in dims:
+                        v = parse_fraction(pat.group(2))
+                        if v and 0 < v < 24: dims['od'] = round(v, 4)
 
         elif ptype == 'tube':
-            # Length — also handles "72" Long" at START of title like "72" Long Acrylic Tube..."
-            len_m = re.search(
-                rf'{num}["\s]*(?:l\b|length|long)',
-                title_normalized, re.IGNORECASE
-            )
-            # Also catch leading length like "72" Long Acrylic..."
-            if not len_m:
-                len_m = re.search(
-                    rf'^[^0-9]*({num.strip("()")})["\s]*(?:long|length|l\b)',
-                    title_normalized, re.IGNORECASE
-                )
             id_m = re.search(rf'{num}["\s]*id', title_normalized, re.IGNORECASE)
             od_m = re.search(rf'{num}["\s]*od', title_normalized, re.IGNORECASE)
+            len_m = re.search(rf'{num}["\s]*(?:l\b|length)', title_normalized, re.IGNORECASE)
             if id_m:
                 val = parse_fraction(id_m.group(1))
                 if val and 0 < val < 24: dims['id'] = round(val, 4)
@@ -1531,32 +1444,15 @@ def extract_dimensions(title):
                 if val and 0 < val < 300: dims['length'] = round(val, 4)
 
         elif ptype == 'square_rod':
-            # Handles: 3/16" (0.1875") Square x 12" Length
-            # Also handles: 1/2" x 1/2", 12" L
-            size_m = re.search(
-                rf'{num}["\s]*(?:\([^)]*\)["\s]*)?(?:square|sq\b)',
-                title_normalized, re.IGNORECASE
-            )
-            if not size_m:
-                size_m = re.search(rf'{num}["\s]*x\s*{num}["\s]', title_normalized, re.IGNORECASE)
-            len_m = re.search(
-                rf'{num}["\s]*(?:length|long|l\b)',
-                title_normalized, re.IGNORECASE
-            )
+            # size x size, length
+            size_m = re.search(rf'{num}["\s]*x\s*{num}["\s]', title_normalized, re.IGNORECASE)
+            len_m = re.search(rf'{num}["\s]*(?:l\b|length)', title_normalized, re.IGNORECASE)
             if size_m:
                 val = parse_fraction(size_m.group(1))
                 if val and 0 < val < 24: dims['size'] = round(val, 4)
             if len_m:
                 val = parse_fraction(len_m.group(1))
                 if val and 0 < val < 300: dims['length'] = round(val, 4)
-            # Fallback: if size found but no length, look for larger number
-            if dims.get('size') and not dims.get('length'):
-                all_nums = re.findall(rf'{num}', title_normalized)
-                for n_str in all_nums:
-                    n = parse_fraction(n_str)
-                    if n and n > dims.get('size', 0) and n < 300:
-                        dims['length'] = round(n, 4)
-                        break
 
         elif ptype == 'square_tube':
             # OD x OD x wall, length
@@ -1623,23 +1519,8 @@ def extract_dimensions(title):
                 if val and 0 < val < 4: dims['wall'] = round(val, 4)
 
         elif ptype == 'cube':
-            # Handles: 5/8" (Pack of N), 1-1/2", 1" x 1" x 1"
-            # Pattern: trailing dimension after last dash or at end
-            # Format: "Clear - 5/8\" (Pack of 50)" or "Clear - 1-1/2\""
-            # First try explicit size
-            size_m = re.search(
-                rf'[-–]\s*({num.strip("()")})["\s]',
-                title_normalized, re.IGNORECASE
-            )
-            if not size_m:
-                # Try x x x format
-                size_m = re.search(rf'{num}["\s]*x\s*{num}', title_normalized, re.IGNORECASE)
-            if not size_m:
-                # Last number in title before pack info
-                size_m = re.search(
-                    rf'({num.strip("()")})["\s]*(?:\(pack|\Z)',
-                    title_normalized, re.IGNORECASE
-                )
+            # size x size x size or just size
+            size_m = re.search(rf'{num}["\s]*(?:x\s*{num})?', title_normalized, re.IGNORECASE)
             if size_m:
                 val = parse_fraction(size_m.group(1))
                 if val and 0 < val < 24: dims['size'] = round(val, 4)
@@ -1772,7 +1653,7 @@ def build_title(title, dims, material_key, material_name,
         t = format_dim(dims.get('thickness'))
         w = format_dim(dims.get('width'))
         l = format_dim(dims.get('length'))
-        dim_str = f', {t} x {w} W x {l} L' if all([t, w, l]) else ''
+        dim_str = f', {t} Thick, {w} W x {l} L' if all([t, w, l]) else ''
         return f'{prefix}{cast_str}{material_name} Sheet, {modifier_str}{color_str}{dim_str}{pack_str}'
 
     elif ptype == 'rod':
@@ -1824,7 +1705,7 @@ def build_title(title, dims, material_key, material_name,
 
     elif ptype == 'sphere':
         dia = format_dim(dims.get('diameter'))
-        dim_str = f', {dia} OD' if dia else ''
+        dim_str = f', {dia} Diameter' if dia else ''
         return f'{prefix}{solid_str}{cast_str}{material_name} Sphere, {modifier_str}{color_str}{dim_str}{pack_str}'
 
     elif ptype == 'half_sphere':
@@ -1833,7 +1714,7 @@ def build_title(title, dims, material_key, material_name,
         if solid_hollow and 'Hollow' in solid_hollow and wall:
             dim_str = f', {dia} OD x {wall} Wall' if dia else ''
         else:
-            dim_str = f', {dia} OD' if dia else ''
+            dim_str = f', {dia} Diameter' if dia else ''
         return f'{prefix}{solid_str}{cast_str}{material_name} Half Sphere, {modifier_str}{color_str}{dim_str}{pack_str}'
 
     elif ptype == 'cube':
@@ -1845,43 +1726,22 @@ def build_title(title, dims, material_key, material_name,
         t = format_dim(dims.get('thickness'))
         w = format_dim(dims.get('width'))
         l = format_dim(dims.get('length'))
-        # Always include thickness in cutting board title
-        if all([t, w, l]):
-            dim_str = f', {t} x {w} W x {l} L'
-        elif all([w, l]):
-            dim_str = f', {w} W x {l} L'
-        else:
-            dim_str = ''
+        dim_str = f', {t} Thick, {w} W x {l} L' if all([t, w, l]) else ''
         return f'{prefix}Plastic Cutting Board Sheet, Food Grade HDPE, {color_str}{dim_str}{pack_str}'
 
     elif ptype == 'cutting_board_oem':
-        # Extract model number — look for alphanumeric codes after model/# keywords
-        # Also catches codes like 5-316, KP26, etc.
-        model_match = re.search(
-            r'(?:model|#|no\.?|part)\s*:?\s*([A-Z0-9][A-Z0-9\-]+)',
-            title, re.IGNORECASE
-        )
-        # Fallback — look for standalone model-like codes (letters+numbers)
-        if not model_match:
-            model_match = re.search(
-                r'\b([A-Z]{1,3}[0-9]{2,}(?:-[A-Z0-9]+)?)\b',
-                title, re.IGNORECASE
-            )
-        model_str = f', Model: {model_match.group(1).upper()}' if model_match else ''
+        # Extract model number and brand from title
+        model_match = re.search(r'(?:model|#|no\.?)\s*([A-Z0-9-]+)', title, re.IGNORECASE)
+        model_str = f', Model: {model_match.group(1)}' if model_match else ''
         w = format_dim(dims.get('width'))
         l = format_dim(dims.get('length'))
         dim_str = f', {w} W x {l} L' if w and l else ''
-        # Find equipment brand name — stop before 'Model', 'Inc', numbers etc.
+        # Try to find the equipment brand
         brand_match = re.search(
-            r'(?:for|replacement for)\s+([A-Za-z]+(?:\s+[A-Za-z]+)??)(?:\s+(?:model|inc|corp|co\b|#|\d))',
+            r'(?:for|replacement for)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)',
             title, re.IGNORECASE
         )
-        if not brand_match:
-            brand_match = re.search(
-                r'(?:for|replacement for)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)',
-                title, re.IGNORECASE
-            )
-        equip_brand = brand_match.group(1).strip().title() if brand_match else 'Commercial Equipment'
+        equip_brand = brand_match.group(1).title() if brand_match else 'Commercial Equipment'
         return f'{prefix}Cutting Board OEM Replacement for {equip_brand}{dim_str}{model_str}'
 
     else:
@@ -1902,14 +1762,7 @@ def calculate_weight(material_key, dims):
 
     try:
         if ptype in ('sheet', 'cutting_board', 'cutting_board_oem'):
-            # For OEM cutting boards, thickness is often not in the title
-            # Use a standard commercial cutting board thickness (3/4") as default
-            thickness = dims.get('thickness')
-            if not thickness and ptype == 'cutting_board_oem':
-                thickness = 0.75  # Standard commercial cutting board thickness
-            if thickness and all(k in dims for k in ('width', 'length')):
-                volume = thickness * dims['width'] * dims['length']
-            elif all(k in dims for k in ('thickness', 'width', 'length')):
+            if all(k in dims for k in ('thickness', 'width', 'length')):
                 volume = dims['thickness'] * dims['width'] * dims['length']
 
         elif ptype == 'rod':
@@ -2083,11 +1936,276 @@ def is_lightweight(box_dims, chargeable_weight):
 # IMAGE AUDIT FLAG
 # ============================================================
 
+IMAGE_AUDIT_REASONS = {
+    'transparency_mismatch': 'Listing says {expected} but image may show different transparency level',
+    'quantity_mismatch': 'Listing says Pack of {pack} but image may show different quantity',
+    'color_mismatch': 'Listing color is {color} — verify image matches',
+}
+
+def check_image_audit_flag(title, dims, modifiers, color, pack):
+    """
+    Flag listings where the image is likely wrong.
+    Only flags HIGH confidence issues to avoid flooding the review queue.
+    - Transparency listings: always flag (most commonly wrong)
+    - Very large packs (500+): flag (image almost always shows single)
+    - Color: NOT flagged by default — too noisy, low signal
+    """
+    flags = []
+
+    # HIGH VALUE: Transparency listings — these are the most commonly wrong
+    # and directly cause customer returns
+    if modifiers:
+        for mod in modifiers:
+            flags.append({
+                'reason': f'Transparency listing ({mod}) — verify image shows correct opacity level',
+                'confidence': 'HIGH',
+                'check': 'transparency',
+            })
+
+    # MEDIUM VALUE: Very large pack quantities only (500+)
+    # Small packs (2, 4, 8) are usually shown correctly
+    if pack and pack >= 500:
+        flags.append({
+            'reason': f'Very large pack (Pack of {pack}) — image almost certainly shows single piece',
+            'confidence': 'MEDIUM',
+            'check': 'quantity',
+        })
+
+    if flags:
+        return True, flags
+    return False, []
 
 # ============================================================
 # HTML IMAGE REVIEW WINDOW
 # ============================================================
 
+class ImageReviewServer:
+    """
+    Serves an auto-refreshing HTML page for image review decisions.
+    Runs in a background thread alongside the main optimizer.
+    """
+
+    def __init__(self, queue_file, results_file, port=8765):
+        self.queue_file = queue_file
+        self.results_file = results_file
+        self.port = port
+        self.server = None
+        self.thread = None
+
+        # Initialize empty results file
+        if not Path(results_file).exists():
+            with open(results_file, 'w') as f:
+                json.dump({}, f)
+
+    def get_html(self):
+        """Generate the review page HTML."""
+        try:
+            with open(self.queue_file, 'r') as f:
+                queue = json.load(f)
+            with open(self.results_file, 'r') as f:
+                results = json.load(f)
+        except:
+            queue = []
+            results = {}
+
+        # Find next unreviewed item
+        pending = [item for item in queue if item['sku'] not in results]
+        reviewed = [item for item in queue if item['sku'] in results]
+
+        if not pending:
+            next_item = None
+        else:
+            next_item = pending[0]
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Plastic-Craft Image Review</title>
+    <meta http-equiv="refresh" content="3">
+    <style>
+        body {{ font-family: Arial, sans-serif; background: #1B365D; color: white; margin: 0; padding: 20px; }}
+        .header {{ background: #0f2040; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
+        .header h1 {{ margin: 0; color: #A8C8E8; }}
+        .progress {{ color: #A8C8E8; margin-top: 8px; }}
+        .review-card {{ background: white; color: #333; border-radius: 8px; padding: 24px; margin-bottom: 20px; }}
+        .listing-info {{ background: #f5f5f5; padding: 16px; border-radius: 6px; margin-bottom: 16px; }}
+        .listing-info h2 {{ margin: 0 0 8px 0; color: #1B365D; font-size: 16px; }}
+        .listing-info p {{ margin: 4px 0; font-size: 14px; }}
+        .flag-reason {{ background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px; margin-bottom: 16px; }}
+        .flag-reason strong {{ color: #856404; }}
+        .image-area {{ text-align: center; margin: 20px 0; }}
+        .image-area img {{ max-width: 400px; max-height: 400px; border: 2px solid #ddd; border-radius: 8px; }}
+        .no-image {{ background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 40px; color: #6c757d; }}
+        .buttons {{ display: flex; gap: 12px; justify-content: center; margin-top: 20px; }}
+        .btn {{ padding: 14px 32px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; text-decoration: none; }}
+        .btn-approve {{ background: #28a745; color: white; }}
+        .btn-reject {{ background: #dc3545; color: white; }}
+        .btn-skip {{ background: #6c757d; color: white; }}
+        .btn:hover {{ opacity: 0.85; }}
+        .waiting {{ text-align: center; padding: 60px; }}
+        .waiting h2 {{ color: #A8C8E8; }}
+        .reviewed-list {{ background: white; color: #333; border-radius: 8px; padding: 20px; }}
+        .reviewed-item {{ padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }}
+        .result-approve {{ color: #28a745; font-weight: bold; }}
+        .result-reject {{ color: #dc3545; font-weight: bold; }}
+        .result-skip {{ color: #6c757d; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Plastic-Craft | Amazon Image Review</h1>
+        <div class="progress">
+            Reviewed: {len(reviewed)} / {len(queue)} total |
+            Pending: {len(pending)}
+        </div>
+    </div>"""
+
+        if next_item:
+            flags_html = ''.join([
+                f'<div class="flag-reason"><strong>⚠ {f["confidence"]} CONFIDENCE:</strong> {f["reason"]}</div>'
+                for f in next_item.get('flags', [])
+            ])
+
+            image_html = ''
+            img_url = next_item.get('current_image_url', '')
+            if img_url:
+                image_html = f'<img src="{img_url}" alt="Current Amazon Image" onerror="this.style.display=\'none\'">'
+            else:
+                image_html = '<div class="no-image">No image URL available for preview</div>'
+
+            html += f"""
+    <div class="review-card">
+        <div class="listing-info">
+            <h2>{next_item.get('title', 'Unknown')}</h2>
+            <p><strong>SKU:</strong> {next_item.get('sku', '')} &nbsp;|&nbsp;
+               <strong>ASIN:</strong> {next_item.get('asin', '')} &nbsp;|&nbsp;
+               <strong>Material:</strong> {next_item.get('material', '')}</p>
+            <p><strong>Color:</strong> {next_item.get('color', '')} &nbsp;|&nbsp;
+               <strong>Transparency:</strong> {', '.join(next_item.get('modifiers', [])) or 'N/A'} &nbsp;|&nbsp;
+               <strong>Pack:</strong> {next_item.get('pack', 'Single')}</p>
+        </div>
+
+        {flags_html}
+
+        <div class="image-area">
+            <p><strong>Current Amazon Image:</strong></p>
+            {image_html}
+            {'<p><small><a href="' + img_url + '" target="_blank" style="color:#1B365D">Open full size ↗</a></small></p>' if img_url else ''}
+        </div>
+
+        <div class="buttons">
+            <a href="/review/{next_item['sku']}/approve" class="btn btn-approve">✅ Image Looks Correct</a>
+            <a href="/review/{next_item['sku']}/reject" class="btn btn-reject">❌ Image is Wrong</a>
+            <a href="/review/{next_item['sku']}/skip" class="btn btn-skip">⏭ Skip for Now</a>
+        </div>
+    </div>"""
+
+        else:
+            html += """
+    <div class="waiting">
+        <h2>⏳ Waiting for items to review...</h2>
+        <p>This page refreshes automatically every 3 seconds.</p>
+        <p>When the optimizer finds a listing with a potential image issue,<br>it will appear here for your review.</p>
+    </div>"""
+
+        if reviewed:
+            html += """
+    <div class="reviewed-list">
+        <h3 style="color: #1B365D;">Recently Reviewed</h3>"""
+            for item in reversed(reviewed[-10:]):
+                result = results.get(item['sku'], 'unknown')
+                css = {'approve': 'result-approve', 'reject': 'result-reject'}.get(result, 'result-skip')
+                label = {'approve': '✅ Correct', 'reject': '❌ Wrong', 'skip': '⏭ Skipped'}.get(result, result)
+                html += f"""
+        <div class="reviewed-item">
+            <span>{item.get('title', item['sku'])[:80]}</span>
+            <span class="{css}">{label}</span>
+        </div>"""
+            html += "</div>"
+
+        html += "</body></html>"
+        return html
+
+    def start(self):
+        """Start the review server in a background thread."""
+        queue_file = self.queue_file
+        results_file = self.results_file
+        review_server = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                # Handle review decisions
+                review_match = re.match(r'/review/([^/]+)/(\w+)', self.path)
+                if review_match:
+                    sku = review_match.group(1)
+                    decision = review_match.group(2)
+                    try:
+                        with open(results_file, 'r') as f:
+                            results = json.load(f)
+                        results[sku] = decision
+                        with open(results_file, 'w') as f:
+                            json.dump(results, f)
+                    except:
+                        pass
+                    # Redirect back to main page
+                    self.send_response(302)
+                    self.send_header('Location', '/')
+                    self.end_headers()
+                    return
+
+                # Serve main page
+                html = review_server.get_html()
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(html.encode())
+
+            def log_message(self, format, *args):
+                pass  # Suppress server logs
+
+        try:
+            self.server = socketserver.TCPServer(('', self.port), Handler)
+            self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+            self.thread.start()
+            return True
+        except Exception as e:
+            return False
+
+    def add_to_queue(self, item):
+        """Add a listing to the review queue."""
+        try:
+            queue = []
+            if Path(self.queue_file).exists():
+                with open(self.queue_file, 'r') as f:
+                    queue = json.load(f)
+            # Avoid duplicates
+            if not any(i['sku'] == item['sku'] for i in queue):
+                queue.append(item)
+                with open(self.queue_file, 'w') as f:
+                    json.dump(queue, f, indent=2)
+        except Exception:
+            pass
+
+    def get_decision(self, sku, timeout=300):
+        """
+        Wait for a review decision on a specific SKU.
+        Returns decision string or 'timeout'.
+        """
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                with open(self.results_file, 'r') as f:
+                    results = json.load(f)
+                if sku in results:
+                    return results[sku]
+            except:
+                pass
+            time.sleep(2)
+        return 'timeout'
+
+    def stop(self):
+        if self.server:
+            self.server.shutdown()
 
 # ============================================================
 # VALIDATION
@@ -2098,11 +2216,10 @@ CAPS_PATTERN = re.compile(r'^[A-Z][A-Z\s&/+\-,]{2,}—')
 
 CERTIFICATION_PARAGRAPH = (
     'Plastic-Craft Products has been a trusted supplier of quality plastic '
-    'materials since 1934. We are ISO 9001:2015 and AS9100D certified, ensuring '
-    'rigorous quality management standards across our entire operation. All '
-    'dimensions are held to +/- 0.010" tolerances. Whether you\'re a hobbyist, '
-    'fabricator, engineer, or procurement professional — we have the materials '
-    'and expertise to support your project.'
+    'materials since 1934. With over 90 years of experience, we stock and ship '
+    'from West Nyack, NY. All dimensions are held to +/- 0.010" tolerances. '
+    'Whether you\'re a hobbyist, fabricator, engineer, or procurement '
+    'professional — we have the materials and expertise to support your project.'
 )
 
 def validate_input(dims, material_key, title):
@@ -2135,7 +2252,7 @@ def validate_output(content, freight_needed):
     if not desc: issues.append('DESCRIPTION_MISSING')
     elif len(desc) > LIMITS['description']: issues.append(f'DESCRIPTION_TOO_LONG:{len(desc)}')
     if desc and CERTIFICATION_CLOSING not in desc: issues.append('DESCRIPTION_MISSING_CERTIFICATION')
-    if freight_needed and FREIGHT_BLURB[:30] not in desc: issues.append('FREIGHT_NOTICE_MISSING')
+    # freight notice intentionally excluded from descriptions
     backend = content.get('backend_search_terms', '')
     if not backend: issues.append('BACKEND_MISSING')
     elif len(backend.encode('utf-8')) > LIMITS['backend_search_terms']:
@@ -2168,14 +2285,12 @@ def auto_correct(content, issues, freight_needed):
             # before appending either, to prevent exceeding 2000 chars
             desc = corrected.get('description', '')
             cert_needed = CERTIFICATION_CLOSING not in desc
-            freight_needed_flag = freight_needed and FREIGHT_BLURB[:30] not in desc
+            freight_needed_flag = False  # freight notice removed from descriptions — triggers Amazon flags
 
             # Calculate what we need to append
             append_parts = []
             if cert_needed:
                 append_parts.append(CERTIFICATION_PARAGRAPH)
-            if freight_needed_flag:
-                append_parts.append(FREIGHT_BLURB)
 
             if not append_parts:
                 continue
@@ -2200,9 +2315,18 @@ def auto_correct(content, issues, freight_needed):
                 cert_text = desc[cert_idx:]
                 body = desc[:cert_idx].strip()
                 available = LIMITS['description'] - len(cert_text) - 4
-                corrected['description'] = body[:available].strip() + '\n\n' + cert_text
+                trimmed = body[:available]
+                # cut at last sentence boundary to avoid mid-sentence truncation
+                last_sent = max(trimmed.rfind('. '), trimmed.rfind('.\n'), trimmed.rfind('? '), trimmed.rfind('! '))
+                if last_sent > available // 2:
+                    trimmed = trimmed[:last_sent + 1]
+                corrected['description'] = trimmed.strip() + '\n\n' + cert_text
             else:
-                corrected['description'] = desc[:LIMITS['description']].strip()
+                trimmed = desc[:LIMITS['description']]
+                last_sent = max(trimmed.rfind('. '), trimmed.rfind('.\n'), trimmed.rfind('? '), trimmed.rfind('! '))
+                if last_sent > LIMITS['description'] // 2:
+                    trimmed = trimmed[:last_sent + 1]
+                corrected['description'] = trimmed.strip()
             fixes.append('DESCRIPTION_TRIMMED')
 
         elif re.match(r'BULLET(\d)_TOO_LONG', issue):
@@ -2223,36 +2347,63 @@ client = None  # placeholder, set in process_listings()
 
 def build_system_prompt():
     return """You are an expert Amazon listing copywriter for Plastic-Craft Products,
-founded 1934, ISO 9001:2015 and AS9100D certified, West Nyack NY.
+founded 1934, West Nyack NY.
+
+CRITICAL — NEVER include any of the following (Amazon policy violations):
+- Regulatory or certification claims: FDA, NSF, USDA, EPA, ASTM, RoHS, ISO, CE, UL, REACH
+- Food safety claims: food-safe, food-grade, food contact, direct food contact
+- Medical claims: medical-grade, hospital-grade, biocompatible, USP Class VI
+- Guarantee language: guaranteed, guarantee, warranty claims
+- BPA-free, lead-free, non-toxic, chemical-free claims
+- Freight or shipping policy information
+- Superlatives or unverifiable claims: best, greatest, highest, most advanced, leading, superior, excellent, ideal, perfect, exceptional, outstanding, remarkable, significant, significantly, premium, ultimate, revolutionary, world-class, state-of-the-art, cutting-edge, innovative, proven, trusted
+- "The only", "unlike any other", "one of a kind"
+- "Inspected before shipment", "quality checked", "hand selected"
+- Millions/billions of times, limitless, infinite cycles
+
+ONLY use facts that can be verified: dimensions, PSI values, temperature ranges, weight, chemical names, years in business, city of operation.
 
 TITLE: Already provided — use as-is, do not regenerate.
 
-BULLETS — EVERY bullet MUST start with ALL CAPS benefit phrase + em dash (—):
-- B1: Material properties with specific data (PSI, temp ratings, compliance)
-- B2: Exact specs — dimensions, tolerances +/-0.010", pack quantity, weight
+BULLETS — EVERY bullet MUST start with a Title Case benefit phrase + em dash (—):
+- B1: Material properties with specific verified data (PSI, temp ratings, chemical resistance)
+- B2: Exact specs — dimensions, tolerances +/-0.010", pack quantity
 - B3: Applications — specific industries, projects, use cases (use provided intended_use)
-- B4: Fabrication — tools, bonding, forming, machining methods
-- B5: EXACTLY: "PRECISION TOLERANCES & QUALITY — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured under ISO 9001:2015 certified quality management standards for reliable material quality on every order."
+- B4: Fabrication — tools, cutting, bonding, forming, machining methods
+- B5: EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured with rigorous quality standards for reliable material quality on every order."
 - Each bullet under 500 characters
-- Feature + Benefit + Proof with numbers and data
-- Answer real buyer pain points
-- NO description — bullets only this run
+- Every claim must be a verifiable fact — no marketing language
+- NEVER use all-caps words (Amazon listing violation)
+
+DESCRIPTION:
+- START with the RUFUS Q&A BLOCK provided — format as Q: / A: pairs
+- Follow with factual copy covering material properties, dimensions, and applications
+- Include verified material data (tensile strength, temp ratings, chemical resistance)
+- Include recommended uses provided
+- Include "Stocked and ships from West Nyack, NY"
+- Include Utility Grade/Nominal if in original title
+- NO shipping or freight information
+- MUST end EXACTLY: "Plastic-Craft Products has been a supplier of plastic materials since 1934. With over 90 years of experience, we stock and ship from West Nyack, NY. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
+- Under 2000 characters total including Q&A block
 
 BACKEND TERMS:
 - Under 249 bytes, space-separated, NO commas
 - NO words from title, NO prohibited terms (best top guaranteed free sale discount cheap)
-- Include alternate names, misspellings, applications
+- Include alternate names, Spanish terms provided, misspellings, applications
 - Include "west nyack ny" "plastic supplier" "usa stocked"
+- Include all Spanish terms provided in context
+
+ATTRIBUTES: material_type, color (clean name only), size_description (human readable), finish_type
 
 Return ONLY valid JSON no markdown:
-{"bullet1":"...","bullet2":"...","bullet3":"...","bullet4":"...","bullet5":"...","backend_search_terms":"...","material_type":"...","color":"...","size_description":"...","finish_type":"..."}"""
+{"bullet1":"...","bullet2":"...","bullet3":"...","bullet4":"...","bullet5":"...","description":"...","backend_search_terms":"...","material_type":"...","color":"...","size_description":"...","finish_type":"..."}"""
 
 def generate_content(row, dims, material_key, material_name,
                      weight, box_dims, base_backend, freight_needed,
                      new_title, intended_use):
     global client
     original_title = row.get('item-name', '').strip()
-    original_desc = clean_text(row.get('item-description', '').strip())
+    original_desc = row.get('item-description', '').strip()
     modifiers, cast_ext, solid_hollow, color = detect_color_and_modifiers(original_title)
     pack = detect_pack(original_title)
     mat_data = MATERIAL_DATA.get(material_key, {})
@@ -2263,24 +2414,32 @@ def generate_content(row, dims, material_key, material_name,
     mat_comp = MATERIAL_COMPOSITION.get(material_key, '')
 
     context = f"""Pre-built title (use exactly): {new_title}
+Original title: {original_title}
+Original description: {original_desc[:300] if original_desc else 'None'}
 SKU: {row.get('seller-sku','')} | ASIN: {row.get('asin1','')}
 Material: {material_name} | Key: {material_key}
+Material composition: {mat_comp}
 Product type: {dims.get('product_type','unknown')}
 Dimensions: {json.dumps({k:v for k,v in dims.items() if k not in ('product_type','had_mm','mm_conversions')})}
 Color: {color} | Modifiers: {modifiers} | Pack: {pack}
-Weight: {weight} lbs
+Weight: {weight} lbs | Box: {json.dumps(box_dims)}
 Key stat: {mat_data.get('key_stat','N/A')}
 Tensile strength: {mat_data.get('tensile_psi','N/A')} PSI
 Service temp: {mat_data.get('service_temp','N/A')}
-Compliance: {', '.join(mat_data.get('compliance',[]))}
 Pain points: {' | '.join(mat_data.get('pain_points',[]))}
-Intended use: {intended_use}
-Base backend terms: {' '.join(base_backend[:8])}"""
+Intended use for this shape: {intended_use}
+Recommended uses: {rec_uses}
+Freight required: {freight_needed}
+Base backend terms: {' '.join(base_backend[:12])}
+Spanish backend terms to include: {spanish}
+RUFUS Q&A BLOCK — include this at the START of the description before main copy:
+{rufus_qa}
+"""
 
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=800,
+            max_tokens=1800,
             system=build_system_prompt(),
             messages=[{"role": "user", "content": context}]
         )
@@ -2309,7 +2468,7 @@ def retry_single_field(field_name, content, row, dims, material_key, material_na
 Product: {new_title}
 Material: {material_name} | Type: {dims.get('product_type')}
 Rules: Under 2000 chars, conversational, answer buyer questions, MUST end with exactly:
-"Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. We are ISO 9001:2015 and AS9100D certified, ensuring rigorous quality management standards across our entire operation. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
+"Plastic-Craft Products has been a trusted supplier of quality plastic materials since 1934. With over 90 years of experience, we stock and ship from West Nyack, NY. All dimensions are held to +/- 0.010" tolerances. Whether you're a hobbyist, fabricator, engineer, or procurement professional — we have the materials and expertise to support your project."
 Return ONLY the description text.""",
         'backend_search_terms': f"""Write only Amazon backend search terms.
 Product: {new_title}
@@ -2322,15 +2481,15 @@ Return ONLY the space-separated terms.""",
         '2': 'exact dimensions, tolerances +/-0.010", pack quantity',
         '3': 'applications, industries, specific use cases',
         '4': 'fabrication — tools, cutting, bonding, machining',
-        '5': 'EXACTLY: "PRECISION TOLERANCES & QUALITY — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured under ISO 9001:2015 certified quality management standards for reliable material quality on every order."',
+        '5': 'EXACTLY: "Precision Tolerances & Quality — Dimensions held to +/- 0.010" ensuring consistent, precise fit for fabrication and engineering applications. Manufactured with rigorous quality standards for reliable material quality on every order."',
     }
     if field_name.startswith('bullet'):
         num = field_name[-1]
         prompts[field_name] = f"""Write only bullet {num} for this Amazon listing.
 Product: {new_title} | Material: {material_name}
 Focus: {bullet_focus.get(num,'product benefit')}
-Rules: MUST start with ALL CAPS benefit phrase followed by em dash (—), under 500 chars.
-Example: "IMPACT RESISTANT — ABS delivers..."
+Rules: MUST start with Title Case benefit phrase followed by em dash (—), under 500 chars. Never use all-caps words.
+Example: "Impact Resistant — ABS delivers..."
 Return ONLY the bullet text."""
 
     prompt = prompts.get(field_name)
@@ -2622,6 +2781,7 @@ FIELDNAMES = [
     'age_restriction',
     'shipping_template',
     # Audit fields
+    'image_audit_flag', 'image_audit_reasons',
     'l1_input_issues', 'l2_output_issues',
     'l3_fixes_applied', 'l4_field_retries',
     'validation_final', 'status'
@@ -2659,32 +2819,6 @@ def get_incomplete_reason(row):
         reasons.append('Unknown — review in Seller Central')
 
     return ' | '.join(reasons)
-
-# ============================================================
-# TEXT CLEANING
-# Removes encoding artifacts like â€" from listing content
-# ============================================================
-
-def clean_text(text):
-    if not text:
-        return text
-    # Fix common UTF-8 mojibake
-    fixes = [
-        ('â€"', '-'), ('â€™', "'"), ('â€œ', '"'), ('â€', '"'),
-        ('â€˜', "'"), ('Â°', '°'), ('Â·', '·'), ('Â½', '1/2'),
-        ('Â¼', '1/4'), ('Â¾', '3/4'), ('Ã—', 'x'),
-        ('â„¢', ''), ('Â®', ''), ('Â©', ''), ('\u00a0', ' '),
-        ('\u2013', '-'), ('\u2014', '-'), ('\u2019', "'"),
-        ('\u201c', '"'), ('\u201d', '"'), ('\u00ae', ''), ('\u2122', ''),
-        ('ï¿½', ''), ('\ufffd', ''), ('\ufeff', ''),
-    ]
-    for bad, good in fixes:
-        text = text.replace(bad, good)
-    # Remove remaining non-ASCII
-    text = re.sub(r'[^\x00-\x7F]+', '', text)
-    # Clean extra spaces
-    text = re.sub(r' +', ' ', text).strip()
-    return text
 
 # ============================================================
 # MAIN PROCESSING
@@ -2727,6 +2861,13 @@ def process_listings():
     logger.info("✓ Self-healing engine initialized")
     logger.info("✓ Dimension sanity checker initialized")
 
+    # Initialize image review server
+    review_server = ImageReviewServer(REVIEW_QUEUE_FILE, REVIEW_RESULTS_FILE)
+    if review_server.start():
+        logger.info(f"✓ Image review server started at http://localhost:{review_server.port}")
+        webbrowser.open(f'http://localhost:{review_server.port}')
+    else:
+        logger.warning("⚠ Could not start image review server — image flags will be logged only")
 
     # Load checkpoint
     checkpoint = load_checkpoint()
@@ -2798,7 +2939,7 @@ def process_listings():
     stats = {
         'total': 0, 'successful': 0, 'warnings': 0, 'errors': 0,
         'freight_flagged': 0, 'video_flagged': 0, 'compliance_flagged': 0,
-        'mm_converted': 0,
+        'image_flagged': 0, 'mm_converted': 0,
         'l1_flagged': 0, 'l2_caught': 0, 'l3_fixes': 0, 'l4_retries': 0,
         'top_errors': {},
     }
@@ -2817,7 +2958,7 @@ def process_listings():
     if not err_exists: err_writer.writeheader()
 
     for i, row in enumerate(listings):
-        title = clean_text(row.get('item-name', '').strip())
+        title = row.get('item-name', '').strip()
         sku = row.get('seller-sku', '').strip()
         asin = row.get('asin1', '').strip()
 
@@ -2886,6 +3027,42 @@ def process_listings():
                 logger.info(f"    DIM weight ({dim_weight} lbs) > actual ({weight} lbs) — using DIM")
             stats['freight_flagged'] += 1
 
+        # Image audit flag
+        image_flagged, image_flags = check_image_audit_flag(
+            title, dims, modifiers, color, pack
+        )
+        if image_flagged:
+            stats['image_flagged'] += 1
+            logger.info(f"  📸 Image audit: {len(image_flags)} flags — added to review queue")
+            review_server.add_to_queue({
+                'sku': sku,
+                'asin': asin,
+                'title': new_title,
+                'material': material_name,
+                'color': color or '',
+                'modifiers': modifiers,
+                'pack': pack,
+                'flags': image_flags,
+                'current_image_url': '',
+            })
+            # Check if reviewer has already made a decision on this SKU
+            # (possible if reviewing a previous batch or pre-loaded queue)
+            try:
+                with open(REVIEW_RESULTS_FILE, 'r') as f:
+                    existing_results = json.load(f)
+                if sku in existing_results:
+                    image_review_decision = existing_results[sku]
+                    logger.info(f"  📸 Pre-existing review decision: {image_review_decision}")
+                else:
+                    image_review_decision = 'pending'
+            except:
+                image_review_decision = 'pending'
+
+            jlog.log('image_flagged', {
+                'sku': sku,
+                'flags': image_flags,
+                'decision': image_review_decision
+            })
 
         video_flag = should_flag_video(material_key, dims.get('product_type', ''), weight)
         if video_flag: stats['video_flagged'] += 1
@@ -2966,7 +3143,9 @@ def process_listings():
                 'contains_liquid':    'Yes' if ptype == 'adhesive' else 'No',
                 'age_restriction':    get_age_restriction(dims, ptype),
                 'shipping_template':  get_shipping_template(dims, box_dims, chargeable_weight, lightweight, is_third_party, brand_name),
-                        'l1_input_issues': ' | '.join(l1_issues) if l1_issues else 'PASS',
+                'image_audit_flag': 'YES' if image_flagged else 'NO',
+                'image_audit_reasons': ' | '.join([f['reason'] for f in image_flags]),
+                'l1_input_issues': ' | '.join(l1_issues) if l1_issues else 'PASS',
                 'l2_output_issues': 'API_FAILED',
                 'l3_fixes_applied': 'NONE', 'l4_field_retries': 'NONE',
                 'validation_final': 'FAILED', 'status': 'error'
@@ -3031,6 +3210,16 @@ def process_listings():
         # Always use our pre-built title
         content['title'] = new_title
 
+        # Policy compliance filter (L5)
+        try:
+            from pc_policy_validator import validate_all_fields
+            content, policy_violations = validate_all_fields(content)
+            if policy_violations:
+                for v in policy_violations:
+                    logger.warning(f'  ⚠ POLICY: {v}')
+        except ImportError:
+            pass
+
         # Final validation
         final_issues = validate_output(content, freight_needed)
         final_status = 'ready' if not final_issues else 'ready_with_warnings'
@@ -3092,6 +3281,8 @@ def process_listings():
             'contains_liquid':    'Yes' if ptype == 'adhesive' else 'No',
             'age_restriction':    get_age_restriction(dims, ptype),
             'shipping_template':  get_shipping_template(dims, box_dims, chargeable_weight, lightweight, is_third_party, brand_name),
+            'image_audit_flag': 'YES' if image_flagged else 'NO',
+            'image_audit_reasons': ' | '.join([f['reason'] for f in image_flags]) + (f' | REVIEW_DECISION:{image_review_decision}' if image_flagged else ''),
             'l1_input_issues': ' | '.join(l1_issues) if l1_issues else 'PASS',
             'l2_output_issues': ' | '.join(l2_issues) if l2_issues else 'PASS',
             'l3_fixes_applied': ' | '.join(l3_fixes) if l3_fixes else 'NONE',
@@ -3109,7 +3300,7 @@ def process_listings():
 
         jlog.log('listing_complete', {
             'sku': sku, 'status': final_status,
-            'freight': freight_needed,
+            'freight': freight_needed, 'image_flag': image_flagged,
             'had_mm': dims.get('had_mm', False),
             'l1': len(l1_issues), 'l2': len(l2_issues),
             'l3': len(l3_fixes), 'l4': len(l4_retries),
@@ -3132,6 +3323,7 @@ def process_listings():
 
     out_f.close()
     err_f.close()
+    review_server.stop()
 
     if not TEST_MODE and not errors:
         clear_checkpoint()
@@ -3156,6 +3348,7 @@ def process_listings():
     logger.info(f"  Errors    : {stats['errors']:,}")
     logger.info(f"  MM conv   : {stats['mm_converted']:,}")
     logger.info(f"  Freight   : {stats['freight_flagged']:,}")
+    logger.info(f"  Img flags : {stats['image_flagged']:,}")
     logger.info(f"  L3 fixes  : {stats['l3_fixes']:,}")
     logger.info(f"  L4 retries: {stats['l4_retries']:,}")
     logger.info(f"  Duration  : {int(duration//60)}m {int(duration%60)}s")
